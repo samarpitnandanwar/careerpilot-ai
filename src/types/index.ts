@@ -379,6 +379,160 @@ export interface ApiResponse<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Firestore Document Types
+// ---------------------------------------------------------------------------
+
+export interface FirestoreUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  photoURL: string | null;
+  createdAt: string;
+  updatedAt: string;
+  onboardingCompleted: boolean;
+}
+
+export interface FirestoreProfile {
+  uid: string;
+  fullName: string;
+  headline: string;
+  location: string;
+  yearsOfExperience: number;
+  currentRole: string;
+  targetRoles: string[];
+  targetCompanies: string[];
+  skills: string[];
+  education: string;
+  certifications: string[];
+  preferredLocations: string[];
+  remotePreference: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  noticePeriod: string;
+  workAuthorization: string;
+  careerGoals: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FirestoreResume {
+  id: string;
+  fileName: string;
+  storagePath: string;
+  fileType: string;
+  fileSize: number;
+  uploadedAt: string;
+  updatedAt: string;
+  status: FirestoreResumeStatus;
+  parsedData: ParsedResume | null;
+  active: boolean;
+}
+
+export type FirestoreResumeStatus =
+  | "uploaded"
+  | "processing"
+  | "ready"
+  | "failed";
+
+export interface FirestoreJob {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  url: string | null;
+  description: string;
+  source: string;
+  employmentType: string;
+  salary: string;
+  skills: string[];
+  requirements: string;
+  postedAt: string | null;
+  savedAt: string;
+  status: FirestoreJobStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FirestoreJobStatus =
+  | "saved"
+  | "interested"
+  | "applied"
+  | "closed";
+
+export interface FirestoreApplication {
+  id: string;
+  jobId: string;
+  jobTitle: string;
+  company: string;
+  status: ApplicationStatus;
+  appliedAt: string | null;
+  lastUpdatedAt: string;
+  nextAction: string | null;
+  nextActionDate: string | null;
+  currentAnalysisId: string | null;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FirestoreAnalysis {
+  id: string;
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+  overallScore: number;
+  skillScore: number;
+  experienceScore: number;
+  educationScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  evidence: MatchEvidence[];
+  recommendation: MatchRecommendation;
+}
+
+export interface FirestoreInterview {
+  id: string;
+  applicationId: string;
+  scheduledAt: string | null;
+  interviewType: InterviewType;
+  round: number;
+  status: string;
+  questions: string[];
+  notes: string;
+  feedback: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type InterviewType =
+  | "technical"
+  | "behavioral"
+  | "hr"
+  | "managerial"
+  | "other";
+
+export interface FirestoreNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
+  scheduledFor: string | null;
+  relatedEntityType: string | null;
+  relatedEntityId: string | null;
+}
+
+export interface FirestoreActivity {
+  id: string;
+  type: string;
+  message: string;
+  entityType: string;
+  entityId: string;
+  createdAt: string;
+}
+
+// ---------------------------------------------------------------------------
 // UI Component Props
 // ---------------------------------------------------------------------------
 
@@ -388,3 +542,21 @@ export interface NavItem {
   icon: string;
   badge?: number;
 }
+
+// ---------------------------------------------------------------------------
+// Zod Input Types (re-exported from validation schemas)
+// ---------------------------------------------------------------------------
+// These are the runtime-validated input shapes for API requests.
+// Import from @/types to keep a single source of truth.
+
+export type {
+  ProfileInput,
+  ResumeCreateInput,
+  JobCreateInput,
+  JobUpdateInput,
+  ApplicationCreateInput,
+  ApplicationUpdateInput,
+  InterviewCreateInput,
+  InterviewUpdateInput,
+  NotificationCreateInput,
+} from "@/lib/validation/schemas";

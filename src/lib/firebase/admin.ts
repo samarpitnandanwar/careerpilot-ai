@@ -2,27 +2,39 @@
 // CareerPilot AI — Server-Side Admin SDK
 // ============================================================================
 //
-// This module initializes the Firebase Admin SDK for privileged server-side
-// operations: Firestore access, token verification, Cloud Storage.
+// Initializes the Firebase Admin SDK for privileged server-side operations:
+// Identity Platform token verification, Firestore, Cloud Storage.
 //
-// CREDENTIAL STRATEGY:
-//   - Production (Cloud Run): uses the runtime service account automatically
-//     via Application Default Credentials (ADC).
-//   - Local dev: uses GOOGLE_APPLICATION_CREDENTIALS env var pointing to a
-//     service-account JSON, OR falls back to the Firebase Emulator, OR
-//     provides a clear error.
+// CREDENTIAL STRATEGY (Application Default Credentials — ADC):
 //
-// NEVER commit a service-account JSON file.
-// NEVER put service-account keys in environment variables committed to git.
-// NEVER expose this module to client components.
+//   Production (Cloud Run):
+//     ADC automatically uses the runtime service account:
+//       careerpilot-runtime@careerpilot-ai-506813.iam.gserviceaccount.com
+//     No configuration needed. No JSON key file.
+//
+//   Local development:
+//     Run:  gcloud auth application-default login
+//     This stores credentials in the standard ADC location (~/.config/gcloud/).
+//     No GOOGLE_APPLICATION_CREDENTIALS env var needed.
+//
+//   CI / Non-GCP environments:
+//     If ADC is unavailable, token verification will fail with a clear error.
+//     Set GOOGLE_APPLICATION_CREDENTIALS pointing to a service-account JSON
+//     ONLY for local testing — NEVER in production.
+//
+// SECURITY RULES:
+//   - NEVER commit a service-account JSON file.
+//   - NEVER put service-account keys in environment variables committed to git.
+//   - NEVER expose this module to client components.
+//   - This file must ONLY be imported in server-only code (API routes, workers).
 // ============================================================================
 
-import { initializeApp, cert, getApps, type App } from "firebase-admin/app";
+import { initializeApp, getApps, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage, type Storage } from "firebase-admin/storage";
 
 // ---------------------------------------------------------------------------
-// Lazy singletons
+// Lazy singletons — initialized on first use
 // ---------------------------------------------------------------------------
 
 let _app: App | null = null;
@@ -38,13 +50,15 @@ function getOrInitApp(): App {
     return _app;
   }
 
-  // In production, ADC picks up the Cloud Run runtime service account.
-  // In local dev, ADC looks for GOOGLE_APPLICATION_CREDENTIALS.
-  // If neither is available, initialization will fail with a clear error.
+  // initializeApp() with no credential option uses ADC automatically:
+  //   1. Cloud Run → runtime service account (implicit)
+  //   2. Local dev → gcloud auth application-default login
+  //   3. Fallback → GOOGLE_APPLICATION_CREDENTIALS env var (local dev only)
+  //
+  // If none are available, verifyIdToken() will throw a clear error.
   _app = initializeApp({
     projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "careerpilot-ai-506813",
     storageBucket: process.env.NEXT_PUBLIC_RESUME_BUCKET ?? "careerpilot-ai-506813-resumes",
-    credential: cert({}),
   });
 
   return _app;
@@ -52,7 +66,7 @@ function getOrInitApp(): App {
 
 /**
  * Returns the Admin Firestore instance.
- * @throws If Firebase Admin cannot initialize.
+ * Uses ADC — no service-account JSON required in production.
  */
 export function getAdminFirestore(): Firestore {
   if (_db) return _db;
@@ -63,7 +77,7 @@ export function getAdminFirestore(): Firestore {
 
 /**
  * Returns the Admin Cloud Storage instance.
- * @throws If Firebase Admin cannot initialize.
+ * Uses ADC — no service-account JSON required in production.
  */
 export function getAdminStorage(): Storage {
   if (_storage) return _storage;
