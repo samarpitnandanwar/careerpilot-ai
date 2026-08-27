@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, CardHeader } from "@/components/ui";
 import {
   BarChart3,
@@ -65,7 +65,7 @@ export default function AnalyticsPage() {
   );
 
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
@@ -218,6 +218,6 @@ export default function AnalyticsPage() {
           </Card>
         </div>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

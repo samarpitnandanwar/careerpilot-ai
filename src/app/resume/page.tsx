@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, Badge } from "@/components/ui";
 import { Upload, FileText, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 
@@ -36,7 +36,7 @@ const statusConfig = {
 
 export default function ResumePage() {
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Resume Management</h1>
@@ -115,6 +115,6 @@ export default function ResumePage() {
           )}
         </div>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

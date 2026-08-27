@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, CardHeader, Badge } from "@/components/ui";
 import {
   ArrowLeft,
@@ -168,7 +168,7 @@ function QuestionSection({ title, questions }: QuestionSectionProps) {
 
 export default function InterviewPrepPage() {
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         <Link
           href="/applications"
@@ -239,6 +239,6 @@ export default function InterviewPrepPage() {
           questions={interviewPrep.roleSpecificQuestions}
         />
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

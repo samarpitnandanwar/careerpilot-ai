@@ -1,11 +1,94 @@
-import type { Metadata } from "next";
-import Link from "next/link";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Create Account",
-};
+import { useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  signUpWithEmail,
+  signInWithGoogle,
+  isAuthConfigured,
+} from "@/lib/firebase/auth";
 
 export default function RegisterPage() {
+  const router = useRouter();
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // ------------------------------------------------------------------
+  // Client-side validation
+  // ------------------------------------------------------------------
+
+  function validate(): boolean {
+    const errors: Record<string, string> = {};
+
+    if (!firstName.trim()) errors.firstName = "First name is required.";
+    if (!lastName.trim()) errors.lastName = "Last name is required.";
+    if (!email.trim()) errors.email = "Email is required.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      errors.email = "Please enter a valid email address.";
+    if (password.length < 8) errors.password = "Password must be at least 8 characters.";
+    if (password !== confirmPassword)
+      errors.confirmPassword = "Passwords do not match.";
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  }
+
+  // ------------------------------------------------------------------
+  // Email / password sign-up
+  // ------------------------------------------------------------------
+
+  async function handleEmailSignUp(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    if (!validate()) return;
+
+    setLoading(true);
+
+    const displayName = `${firstName.trim()} ${lastName.trim()}`;
+    const result = await signUpWithEmail(email, password, displayName);
+
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+
+    // Authenticated — send to onboarding for first-time profile setup.
+    router.push("/onboarding");
+  }
+
+  // ------------------------------------------------------------------
+  // Google sign-up
+  // ------------------------------------------------------------------
+
+  async function handleGoogleSignUp() {
+    setError(null);
+    setLoading(true);
+
+    const result = await signInWithGoogle();
+
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+
+    router.push("/onboarding");
+  }
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
+
   return (
     <div className="flex min-h-screen">
       {/* Left panel — branding */}
@@ -25,6 +108,7 @@ export default function RegisterPage() {
       {/* Right panel — form */}
       <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
         <div className="w-full max-w-md">
+          {/* Mobile logo */}
           <div className="mb-8 lg:hidden">
             <Link href="/" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white text-sm font-bold">
@@ -39,7 +123,22 @@ export default function RegisterPage() {
             Start making smarter job search decisions today.
           </p>
 
-          <form className="mt-8 space-y-4" action="#" method="POST">
+          {/* Error banner */}
+          {error && (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Config notice */}
+          {!isAuthConfigured && (
+            <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">
+              Authentication is not configured. Add Identity Platform credentials
+              to <code>.env.local</code>.
+            </div>
+          )}
+
+          <form className="mt-8 space-y-4" onSubmit={handleEmailSignUp}>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="first-name" className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -51,9 +150,15 @@ export default function RegisterPage() {
                   type="text"
                   autoComplete="given-name"
                   required
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   placeholder="Jane"
+                  disabled={loading}
                 />
+                {fieldErrors.firstName && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.firstName}</p>
+                )}
               </div>
               <div>
                 <label htmlFor="last-name" className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -65,9 +170,15 @@ export default function RegisterPage() {
                   type="text"
                   autoComplete="family-name"
                   required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   placeholder="Smith"
+                  disabled={loading}
                 />
+                {fieldErrors.lastName && (
+                  <p className="mt-1 text-xs text-red-600">{fieldErrors.lastName}</p>
+                )}
               </div>
             </div>
             <div>
@@ -80,9 +191,15 @@ export default function RegisterPage() {
                 type="email"
                 autoComplete="email"
                 required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 placeholder="you@example.com"
+                disabled={loading}
               />
+              {fieldErrors.email && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
+              )}
             </div>
             <div>
               <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -94,9 +211,15 @@ export default function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 placeholder="At least 8 characters"
+                disabled={loading}
               />
+              {fieldErrors.password && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.password}</p>
+              )}
             </div>
             <div>
               <label htmlFor="confirm-password" className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -108,15 +231,32 @@ export default function RegisterPage() {
                 type="password"
                 autoComplete="new-password"
                 required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 placeholder="••••••••"
+                disabled={loading}
               />
+              {fieldErrors.confirmPassword && (
+                <p className="mt-1 text-xs text-red-600">{fieldErrors.confirmPassword}</p>
+              )}
             </div>
             <button
               type="submit"
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              disabled={loading || !isAuthConfigured}
+              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
             >
-              Create account
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Creating account…
+                </span>
+              ) : (
+                "Create account"
+              )}
             </button>
           </form>
 
@@ -131,7 +271,9 @@ export default function RegisterPage() {
 
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={handleGoogleSignUp}
+            disabled={loading || !isAuthConfigured}
+            className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path

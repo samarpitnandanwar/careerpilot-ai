@@ -9,7 +9,7 @@ import {
   AlertTriangle,
   Activity,
 } from "lucide-react";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import Link from "next/link";
 import { Card, CardHeader, StatCard, Badge } from "@/components/ui";
 
@@ -52,7 +52,7 @@ const recentActivity = [
 
 export default function DashboardPage() {
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         {/* Page header */}
         <div>
@@ -224,6 +224,6 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

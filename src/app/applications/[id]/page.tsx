@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, CardHeader, Badge, ScoreRing, StatusBadge } from "@/components/ui";
 import {
   ArrowLeft,
@@ -58,7 +58,7 @@ const statusTimeline = [
 export default function ApplicationDetailPage() {
   const job = application.job;
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         <Link
           href="/applications"
@@ -244,6 +244,6 @@ export default function ApplicationDetailPage() {
           <p className="text-sm text-slate-600">{application.notes}</p>
         </Card>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

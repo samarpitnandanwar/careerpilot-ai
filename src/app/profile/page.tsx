@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, CardHeader, Badge } from "@/components/ui";
 import { MapPin, Target, DollarSign, Building2 } from "lucide-react";
 
@@ -42,7 +42,7 @@ const profile = {
 
 export default function ProfilePage() {
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -154,6 +154,6 @@ export default function ProfilePage() {
           </div>
         </Card>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

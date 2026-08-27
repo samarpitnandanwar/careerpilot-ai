@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, StatusBadge, ScoreRing } from "@/components/ui";
 import { Plus, Search, SlidersHorizontal } from "lucide-react";
 import type { ApplicationStatus } from "@/types";
@@ -92,7 +92,7 @@ export default function ApplicationsPage() {
   );
 
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -170,6 +170,6 @@ export default function ApplicationsPage() {
           ))}
         </div>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

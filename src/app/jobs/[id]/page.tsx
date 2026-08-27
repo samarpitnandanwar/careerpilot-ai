@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, CardHeader, Badge, ScoreRing } from "@/components/ui";
 import {
   ArrowLeft,
@@ -103,7 +103,7 @@ export default function JobDetailPage() {
   const daysLeft = 5;
 
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         {/* Back link */}
         <Link
@@ -320,6 +320,6 @@ export default function JobDetailPage() {
           <p className="text-sm leading-7 text-slate-600">{job.description}</p>
         </Card>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

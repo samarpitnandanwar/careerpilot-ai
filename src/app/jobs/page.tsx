@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AppLayout } from "@/components/layout";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, ScoreRing } from "@/components/ui";
 import { Plus, MapPin, Building2, Clock, Search, SlidersHorizontal } from "lucide-react";
 
@@ -74,7 +74,7 @@ const jobs = [
 
 export default function JobsPage() {
   return (
-    <AppLayout>
+    <ProtectedLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -148,6 +148,6 @@ export default function JobsPage() {
           ))}
         </div>
       </div>
-    </AppLayout>
+    </ProtectedLayout>
   );
 }

@@ -1,11 +1,65 @@
-import type { Metadata } from "next";
-import Link from "next/link";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Sign In",
-};
+import { useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  signInWithEmail,
+  signInWithGoogle,
+  isAuthConfigured,
+} from "@/lib/firebase/auth";
 
 export default function LoginPage() {
+  const router = useRouter();
+
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ------------------------------------------------------------------
+  // Email / password sign-in
+  // ------------------------------------------------------------------
+
+  async function handleEmailSignIn(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const result = await signInWithEmail(email, password);
+
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+
+    router.push("/dashboard");
+  }
+
+  // ------------------------------------------------------------------
+  // Google sign-in
+  // ------------------------------------------------------------------
+
+  async function handleGoogleSignIn() {
+    setError(null);
+    setLoading(true);
+
+    const result = await signInWithGoogle();
+
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+
+    router.push("/dashboard");
+  }
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
+
   return (
     <div className="flex min-h-screen">
       {/* Left panel — branding */}
@@ -25,6 +79,7 @@ export default function LoginPage() {
       {/* Right panel — form */}
       <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
         <div className="w-full max-w-md">
+          {/* Mobile logo */}
           <div className="mb-8 lg:hidden">
             <Link href="/" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white text-sm font-bold">
@@ -39,7 +94,25 @@ export default function LoginPage() {
             Sign in to continue your job search journey.
           </p>
 
-          <form className="mt-8 space-y-4" action="#" method="POST">
+          {/* Error banner */}
+          {error && (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Config notice */}
+          {!isAuthConfigured && (
+            <div className="mt-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-700">
+              Authentication is not configured. Add Identity Platform credentials
+              to <code>.env.local</code>.
+            </div>
+          )}
+
+          <form
+            className="mt-8 space-y-4"
+            onSubmit={handleEmailSignIn}
+          >
             <div>
               <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-slate-700">
                 Email address
@@ -50,8 +123,11 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 placeholder="you@example.com"
+                disabled={loading}
               />
             </div>
             <div>
@@ -64,8 +140,11 @@ export default function LoginPage() {
                 type="password"
                 autoComplete="current-password"
                 required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 placeholder="••••••••"
+                disabled={loading}
               />
             </div>
             <div className="flex items-center justify-between text-sm">
@@ -79,9 +158,20 @@ export default function LoginPage() {
             </div>
             <button
               type="submit"
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              disabled={loading || !isAuthConfigured}
+              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
             >
-              Sign in
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Signing in…
+                </span>
+              ) : (
+                "Sign in"
+              )}
             </button>
           </form>
 
@@ -96,7 +186,9 @@ export default function LoginPage() {
 
           <button
             type="button"
-            className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={handleGoogleSignIn}
+            disabled={loading || !isAuthConfigured}
+            className="flex w-full items-center justify-center gap-3 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
           >
             <svg className="h-5 w-5" viewBox="0 0 24 24">
               <path
