@@ -120,7 +120,7 @@ export function calculatePriority(input: PriorityEngineInput): Omit<PriorityEngi
     realDeadline,
     interviewDate,
     null, // assessment deadline
-    application?.nextActionDate ?? null,
+    application?.followUpDate ?? null,
     job.createdAt,
   );
 

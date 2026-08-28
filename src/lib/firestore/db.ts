@@ -109,6 +109,26 @@ export function interviewPrepDoc(
   return interviewPrepCol(db, uid, applicationId).doc(prepId);
 }
 
+export function applicationActivitiesCol(
+  db: Firestore,
+  uid: string,
+  applicationId: string,
+) {
+  return col(db, "users", uid, "applications", applicationId, "activities");
+}
+
+export function eventProcessingCol(db: Firestore, uid: string) {
+  return col(db, "users", uid, "eventProcessing");
+}
+
+export function eventProcessingDoc(
+  db: Firestore,
+  uid: string,
+  eventId: string,
+) {
+  return eventProcessingCol(db, uid).doc(eventId);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

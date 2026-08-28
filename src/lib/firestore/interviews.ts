@@ -5,6 +5,7 @@
 import { getDb, interviewsCol, newId, now } from "./db";
 import { handleFirestoreError } from "@/lib/api-helpers";
 import type { FirestoreInterview, InterviewCreateInput, InterviewUpdateInput } from "@/types";
+import { publishDomainEvent, type EventContext } from "@/lib/events/publisher";
 
 export async function createInterview(
   uid: string,
@@ -30,6 +31,22 @@ export async function createInterview(
     };
 
     await interviewsCol(db, uid).doc(id).set(interview);
+
+    // Publish domain event (fire-and-forget)
+    const eventCtx: EventContext = { userId: uid };
+    publishDomainEvent(
+      eventCtx,
+      "INTERVIEW_SCHEDULED",
+      { type: "interview", id },
+      {
+        interviewId: id,
+        applicationId: input.applicationId,
+        scheduledAt: input.scheduledAt,
+      },
+    ).catch((err) =>
+      console.error("[Interviews] Failed to publish INTERVIEW_SCHEDULED event:", err),
+    );
+
     return interview;
   });
 }
@@ -64,6 +81,27 @@ export async function updateInterview(
       ...data,
       updatedAt: now(),
     });
+
+    // Publish INTERVIEW_COMPLETED when status changes to completed
+    if (data.status === "completed") {
+      const snap = await interviewsCol(db, uid).doc(interviewId).get();
+      if (snap.exists) {
+        const interview = snap.data() as FirestoreInterview;
+        const eventCtx: EventContext = { userId: uid };
+        publishDomainEvent(
+          eventCtx,
+          "INTERVIEW_COMPLETED",
+          { type: "interview", id: interviewId },
+          {
+            interviewId,
+            applicationId: interview.applicationId,
+            scheduledAt: interview.scheduledAt,
+          },
+        ).catch((err) =>
+          console.error("[Interviews] Failed to publish INTERVIEW_COMPLETED event:", err),
+        );
+      }
+    }
   });
 }
 

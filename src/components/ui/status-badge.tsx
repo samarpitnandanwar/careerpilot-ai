@@ -10,8 +10,10 @@ const statusIcons: Record<ApplicationStatus, string> = {
   saved: "○",
   applied: "●",
   screening: "◎",
+  assessment: "◐",
   interview: "◉",
   offer: "★",
+  accepted: "✓",
   rejected: "✗",
   withdrawn: "—",
 };

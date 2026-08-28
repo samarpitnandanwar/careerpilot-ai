@@ -17,6 +17,7 @@ import { generateContent, GeminiError } from "@/lib/ai/vertex";
 import { RESUME_PARSER_PROMPT_V1 } from "@/lib/ai/prompts";
 import { validateResumeData, ResumeValidationError } from "@/lib/validation/resume-schema";
 import { updateResume } from "@/lib/firestore/resumes";
+import { publishDomainEvent, type EventContext } from "@/lib/events/publisher";
 import type { ParsedResume } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -177,6 +178,17 @@ export async function processResume(
       return fail(ERROR_CODES.FIRESTORE_FAILED, "Failed to save parsed resume data");
     }
 
+    // Step 8: Publish domain event (fire-and-forget)
+    const eventCtx: EventContext = { userId: uid };
+    publishDomainEvent(
+      eventCtx,
+      "RESUME_PROCESSED",
+      { type: "resume", id: resumeId },
+      { resumeId },
+    ).catch((err) =>
+      console.error("[ResumePipeline] Failed to publish RESUME_PROCESSED event:", err),
+    );
+
     return {
       success: true,
       parsedData: validatedData,
@@ -186,6 +198,15 @@ export async function processResume(
   } catch (error) {
     // Catch-all: never let unexpected errors crash the pipeline
     console.error("[ResumePipeline] Unexpected error:", error);
+    
+    // Publish failure event (fire-and-forget)
+    publishDomainEvent(
+      { userId: uid },
+      "RESUME_PROCESSING_FAILED",
+      { type: "resume", id: resumeId },
+      { resumeId },
+    ).catch(() => {});
+    
     return fail(ERROR_CODES.GEMINI_FAILED, "An unexpected error occurred during processing");
   }
 }

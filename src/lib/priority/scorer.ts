@@ -39,8 +39,10 @@ export const APPLICATION_STATE_SCORES: Record<ApplicationStatus, number> = {
   saved: 40,
   applied: 55,
   screening: 70,
+  assessment: 75,
   interview: 85,
   offer: 95,
+  accepted: 100,
   rejected: 0,
   withdrawn: 10,
 };
@@ -50,8 +52,10 @@ export const APPLICATION_STATE_LABELS: Record<ApplicationStatus, string> = {
   saved: "Not yet applied",
   applied: "Application submitted",
   screening: "In screening process",
+  assessment: "Assessment in progress",
   interview: "Interview stage",
   offer: "Offer received",
+  accepted: "Offer accepted",
   rejected: "Application rejected",
   withdrawn: "Application withdrawn",
 };

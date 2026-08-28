@@ -248,17 +248,18 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Recent activity — placeholder */}
+        {/* Quick analytics */}
         <Card>
           <CardHeader
-            title="Recent Activity"
-            subtitle="Your latest actions"
+            title="Quick Insights"
+            subtitle="Key metrics from your job search"
+            action={
+              <Link href="/analytics" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                Full Analytics →
+              </Link>
+            }
           />
-          <div className="py-8 text-center">
-            <p className="text-sm text-slate-400">
-              Activity timeline will appear here as you use CareerPilot AI.
-            </p>
-          </div>
+          <AnalyticsQuickInsights />
         </Card>
       </div>
     </ProtectedLayout>
@@ -268,6 +269,66 @@ export default function DashboardPage() {
 // ---------------------------------------------------------------------------
 // Helper — get Firebase ID token
 // ---------------------------------------------------------------------------
+
+function AnalyticsQuickInsights() {
+  const [data, setData] = useState<{
+    responseRate: number;
+    interviewRate: number;
+    offerRate: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch("/api/analytics?range=all", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (!cancelled && json.success && json.data) {
+          setData({
+            responseRate: json.data.core.responseRate,
+            interviewRate: json.data.core.interviewRate,
+            offerRate: json.data.core.offerRate,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!data) {
+    return (
+      <div className="py-8 text-center">
+        <p className="text-sm text-slate-400">
+          Analytics will appear here once you have application data.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-3 gap-4">
+      <div className="text-center">
+        <p className="text-2xl font-bold text-slate-900">{data.responseRate}%</p>
+        <p className="text-xs text-slate-500">Response Rate</p>
+      </div>
+      <div className="text-center">
+        <p className="text-2xl font-bold text-slate-900">{data.interviewRate}%</p>
+        <p className="text-xs text-slate-500">Interview Rate</p>
+      </div>
+      <div className="text-center">
+        <p className="text-2xl font-bold text-slate-900">{data.offerRate}%</p>
+        <p className="text-xs text-slate-500">Offer Rate</p>
+      </div>
+    </div>
+  );
+}
 
 async function getToken(): Promise<string | null> {
   try {

@@ -88,18 +88,32 @@ export const ApplicationCreateSchema = z.object({
   jobId: z.string().min(1, "Job ID is required"),
   jobTitle: z.string().min(1, "Job title is required").max(300),
   company: z.string().min(1, "Company is required").max(200),
+  resumeId: z.string().nullable().default(null),
+  source: z.string().max(100).default("manual"),
+  applicationUrl: z.string().url().nullable().default(null),
+  deadline: z.string().nullable().default(null),
   notes: z.string().max(5000).default(""),
+  initialStatus: z.enum(["saved", "applied"]).default("saved"),
 });
 
 export const ApplicationUpdateSchema = z.object({
-  status: z
-    .enum(["saved", "applied", "screening", "interview", "offer", "rejected", "withdrawn"])
-    .optional(),
-  appliedAt: z.string().nullable().optional(),
-  nextAction: z.string().max(500).nullable().optional(),
-  nextActionDate: z.string().nullable().optional(),
   notes: z.string().max(5000).optional(),
-  currentAnalysisId: z.string().nullable().optional(),
+  deadline: z.string().nullable().optional(),
+  followUpDate: z.string().nullable().optional(),
+  applicationUrl: z.string().url().nullable().optional(),
+  source: z.string().max(100).optional(),
+});
+
+export const ApplicationStatusChangeSchema = z.object({
+  status: z.enum([
+    "applied", "screening", "assessment", "interview",
+    "offer", "accepted", "rejected", "withdrawn",
+  ]),
+  message: z.string().max(1000).default(""),
+});
+
+export const ApplicationNoteSchema = z.object({
+  note: z.string().min(1, "Note cannot be empty").max(5000),
 });
 
 export type ApplicationCreateInput = z.infer<typeof ApplicationCreateSchema>;
