@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { SIDEBAR_NAV } from "@/lib/constants";
 import {
   LayoutDashboard,
+  Zap,
   User,
   FileText,
   Briefcase,
@@ -17,6 +18,7 @@ import type { LucideIcon } from "lucide-react";
 
 const iconMap: Record<string, LucideIcon> = {
   LayoutDashboard,
+  Zap,
   User,
   FileText,
   Briefcase,

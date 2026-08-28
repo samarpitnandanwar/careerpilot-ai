@@ -245,7 +245,7 @@ describe("Pub/Sub Endpoint Authentication", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("accepts request with Pub/Sub verification token header (legacy)", async () => {
+  it("rejects request with X-Goog-Pubsub-Verification-Token alone (legacy no longer accepted)", async () => {
     const { verifyPubSubRequest } = await import("@/lib/events/auth");
 
     const request = new Request("http://localhost:3000/api/events/pubsub", {
@@ -256,10 +256,73 @@ describe("Pub/Sub Endpoint Authentication", () => {
     });
 
     const result = await verifyPubSubRequest(request);
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.identity.email).toBe("pubsub-legacy@system");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.response.status).toBe(401);
     }
+  });
+
+  it("rejects request with verification token + invalid Bearer (cannot bypass OIDC)", async () => {
+    const { verifyPubSubRequest } = await import("@/lib/events/auth");
+
+    const request = new Request("http://localhost:3000/api/events/pubsub", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer fake-google-token",
+        "X-Goog-Pubsub-Verification-Token": "some-pubsub-token",
+      },
+    });
+
+    const result = await verifyPubSubRequest(request);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.response.status).toBe(401);
+    }
+  });
+
+  it("rejects request with malformed Bearer token", async () => {
+    const { verifyPubSubRequest } = await import("@/lib/events/auth");
+
+    const request = new Request("http://localhost:3000/api/events/pubsub", {
+      method: "POST",
+      headers: {
+        Authorization: "Basic dXNlcjpwYXNz",
+      },
+    });
+
+    const result = await verifyPubSubRequest(request);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.response.status).toBe(401);
+    }
+  });
+
+  it("rejects request with empty Bearer token", async () => {
+    const { verifyPubSubRequest } = await import("@/lib/events/auth");
+
+    const request = new Request("http://localhost:3000/api/events/pubsub", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer ",
+      },
+    });
+
+    const result = await verifyPubSubRequest(request);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.response.status).toBe(401);
+    }
+  });
+
+  it("NODE_ENV alone cannot bypass Pub/Sub authentication (source verification)", () => {
+    // The auth module must not use NODE_ENV for authentication decisions.
+    // Verify the source code does not contain NODE_ENV in non-comment lines.
+    const authCode = fs.readFileSync("src/lib/events/auth.ts", "utf-8");
+    const codeWithoutComments = authCode
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("//") && !line.trimStart().startsWith("*"))
+      .join("\n");
+    expect(codeWithoutComments).not.toMatch(/NODE_ENV/);
   });
 
   it("dev bypass works when EVENT_ENDPOINT_DEV_SECRET is set", async () => {
@@ -290,6 +353,22 @@ describe("Pub/Sub Endpoint Authentication", () => {
       method: "POST",
       headers: {
         "X-Event-Dev-Secret": "wrong",
+      },
+    });
+
+    const result = await verifyPubSubRequest(request);
+    expect(result.ok).toBe(false);
+  });
+
+  it("dev bypass is not available without EVENT_ENDPOINT_DEV_SECRET", async () => {
+    delete process.env.EVENT_ENDPOINT_DEV_SECRET;
+
+    const { verifyPubSubRequest } = await import("@/lib/events/auth");
+
+    const request = new Request("http://localhost:3000/api/events/pubsub", {
+      method: "POST",
+      headers: {
+        "X-Event-Dev-Secret": "any-secret",
       },
     });
 
@@ -496,6 +575,8 @@ describe("Information Leakage Prevention", () => {
       expect(body.error).not.toContain("google");
       expect(body.error).not.toContain("OIDC");
       expect(body.error).not.toContain("service-account");
+      expect(body.error).not.toContain("legacy");
+      expect(body.error).not.toContain("verification-token");
     }
   });
 });

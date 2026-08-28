@@ -117,6 +117,14 @@ export function applicationActivitiesCol(
   return col(db, "users", uid, "applications", applicationId, "activities");
 }
 
+export function actionsCol(db: Firestore, uid: string) {
+  return col(db, "users", uid, "actions");
+}
+
+export function actionDoc(db: Firestore, uid: string, actionId: string) {
+  return actionsCol(db, uid).doc(actionId);
+}
+
 export function eventProcessingCol(db: Firestore, uid: string) {
   return col(db, "users", uid, "eventProcessing");
 }

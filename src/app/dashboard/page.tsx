@@ -248,6 +248,20 @@ export default function DashboardPage() {
           </Card>
         </div>
 
+        {/* Action Center */}
+        <Card>
+          <CardHeader
+            title="Action Center"
+            subtitle="Things that need your attention"
+            action={
+              <Link href="/actions" className="text-sm font-medium text-blue-600 hover:text-blue-500">
+                View all →
+              </Link>
+            }
+          />
+          <DashboardActions />
+        </Card>
+
         {/* Quick analytics */}
         <Card>
           <CardHeader
@@ -269,6 +283,83 @@ export default function DashboardPage() {
 // ---------------------------------------------------------------------------
 // Helper — get Firebase ID token
 // ---------------------------------------------------------------------------
+
+function DashboardActions() {
+  const [actions, setActions] = useState<{
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    priority: string;
+    actionUrl: string;
+  }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch("/api/actions?status=OPEN&limit=5", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = await res.json();
+        if (!cancelled && json.success && json.data) {
+          setActions(json.data);
+        }
+      } catch {
+        // ignore
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (actions.length === 0) {
+    return (
+      <div className="py-8 text-center">
+        <p className="text-sm text-slate-400">
+          No pending actions. You&apos;re all caught up!
+        </p>
+      </div>
+    );
+  }
+
+  const priorityColors: Record<string, string> = {
+    CRITICAL: "border-l-red-500",
+    HIGH: "border-l-orange-500",
+    MEDIUM: "border-l-yellow-500",
+    LOW: "border-l-slate-300",
+  };
+
+  return (
+    <div className="space-y-2">
+      {actions.map((action) => (
+        <Link key={action.id} href={action.actionUrl}>
+          <div
+            className={`flex items-center justify-between rounded-lg border border-slate-100 border-l-4 p-3 transition-colors hover:bg-slate-50 cursor-pointer ${priorityColors[action.priority] ?? "border-l-slate-300"}`}
+          >
+            <div className="min-w-0">
+              <p className="font-medium text-slate-900 truncate">{action.title}</p>
+              <p className="text-xs text-slate-500 truncate">{action.description}</p>
+            </div>
+            <Badge
+              variant={
+                action.priority === "CRITICAL"
+                  ? "danger"
+                  : action.priority === "HIGH"
+                    ? "warning"
+                    : "default"
+              }
+            >
+              {action.priority}
+            </Badge>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 function AnalyticsQuickInsights() {
   const [data, setData] = useState<{

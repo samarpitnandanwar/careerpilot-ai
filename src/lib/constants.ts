@@ -24,6 +24,7 @@ export const APPLICATION_PIPELINE = [
 
 export const SIDEBAR_NAV: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
+  { label: "Actions", href: "/actions", icon: "Zap" },
   { label: "Profile", href: "/profile", icon: "User" },
   { label: "Resume", href: "/resume", icon: "FileText" },
   { label: "Jobs", href: "/jobs", icon: "Briefcase" },

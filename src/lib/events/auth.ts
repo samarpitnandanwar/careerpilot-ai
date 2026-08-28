@@ -4,10 +4,14 @@
 //
 // Provides production-safe authentication for:
 //   - Cloud Scheduler (OIDC service-account token)
-//   - Pub/Sub push (OIDC token from authenticated push)
+//   - Pub/Sub push (OIDC token from authenticated push ONLY)
 //
 // Both services send Google-signed JWTs that we verify against Google's
 // public JWKS endpoint.
+//
+// IMPORTANT: The legacy X-Goog-Pubsub-Verification-Token header is NOT
+// accepted as authentication. Pub/Sub must be configured with authenticated
+// push to send OIDC tokens.
 //
 // Security:
 //   - Production: authentication is MANDATORY. No bypass.
@@ -182,13 +186,12 @@ export async function verifySchedulerRequest(
 /**
  * Verify the Pub/Sub push endpoint request.
  *
- * In production with authenticated push enabled, Pub/Sub sends a
- * Google-signed OIDC token in the Authorization header.
+ * Production requires authenticated push with a Google-signed OIDC JWT.
+ * The legacy X-Goog-Pubsub-Verification-Token header is NOT accepted.
  *
- * Without authenticated push, we verify the request structure
- * but cannot verify the sender. In that case, we rely on:
- *   1. Network-level protection (VPC, Cloud Armor)
- *   2. The message being validated/envelope-checked anyway
+ * Accepts ONLY:
+ *   1. A valid Google-signed OIDC JWT (authenticated Pub/Sub push)
+ *   2. A development bypass via EVENT_ENDPOINT_DEV_SECRET + X-Event-Dev-Secret
  *
  * Returns the verified identity or a rejection Response.
  */
@@ -211,25 +214,7 @@ export async function verifyPubSubRequest(
     }
   }
 
-  // --- Path 2: Check for Pub/Sub verification token header ---
-  // Google Pub/Sub can also send a verification token in a custom header.
-  // For legacy push subscriptions without OIDC.
-  const pubsubToken = request.headers.get("X-Goog-Pubsub-Verification-Token");
-  if (pubsubToken) {
-    // This is a Pub/Sub-specific header that only Pub/Sub sends.
-    // In production, verify against the subscription's verification token.
-    // For now, accept as a signal that this is a Pub/Sub request.
-    console.warn(
-      "[EventAuth] Received Pub/Sub verification token (legacy mode). " +
-        "Consider enabling authenticated push for stronger security.",
-    );
-    return {
-      ok: true,
-      identity: { email: "pubsub-legacy@system" },
-    };
-  }
-
-  // --- Path 3: Development bypass ---
+  // --- Path 2: Development bypass ---
   const devBypassSecret = getDevBypassSecret();
   if (devBypassSecret) {
     const devSecret = request.headers.get("X-Event-Dev-Secret");
@@ -245,7 +230,7 @@ export async function verifyPubSubRequest(
     }
   }
 
-  // --- Rejected (in production) ---
+  // --- Rejected ---
   return {
     ok: false,
     response: new Response(

@@ -19,9 +19,10 @@ import type {
   DomainEventType,
   FirestoreEventProcessing,
 } from "@/types";
-import { getDb } from "@/lib/firestore/db";
-import { now } from "@/lib/firestore/db";
+import { getDb, now } from "@/lib/firestore/db";
 import { handleFirestoreError } from "@/lib/api-helpers";
+import { generateActionFromEvent } from "@/lib/actions/generator";
+import { createAction } from "@/lib/actions/service";
 
 // ---------------------------------------------------------------------------
 // Event processing record (idempotency)
@@ -206,12 +207,67 @@ export async function processEvent(
 }
 
 // ---------------------------------------------------------------------------
-// Built-in handlers: Application lifecycle events
+// Terminal state lifecycle helper
 // ---------------------------------------------------------------------------
 
 /**
- * Log-only handler for application events.
- * In the future, this will trigger notifications, AI recommendations, etc.
+ * When an application reaches a terminal state (rejected, withdrawn, accepted),
+ * expire any open HIGH_PRIORITY_JOB actions for that job.
+ */
+async function expirePriorityActionsForJob(
+  userId: string,
+  jobId: string | null | undefined,
+): Promise<void> {
+  if (!jobId) return;
+
+  try {
+    const db = getDb();
+    const actionsRef = db
+      .collection("users")
+      .doc(userId)
+      .collection("actions");
+
+    const snap = await actionsRef
+      .where("status", "==", "OPEN")
+      .where("type", "==", "HIGH_PRIORITY_JOB")
+      .limit(100)
+      .get();
+
+    const batch = db.batch();
+    let expired = 0;
+
+    for (const doc of snap.docs) {
+      const data = doc.data() as { jobId?: string };
+      if (data.jobId === jobId) {
+        batch.update(doc.ref, { status: "EXPIRED", completedAt: now() });
+        expired++;
+      }
+    }
+
+    if (expired > 0) {
+      await batch.commit();
+      console.log(
+        `[EventHandler] Expired ${expired} priority actions for terminal state on user=${userId.substring(0, 8)}...`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[EventHandler] Failed to expire priority actions:`,
+      error,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Built-in handlers: Application lifecycle events
+// ---------------------------------------------------------------------------
+
+const TERMINAL_STATUSES = new Set(["rejected", "withdrawn", "accepted"]);
+
+/**
+ * Log-and-create-action handler for application events.
+ * Generates career actions from domain events.
+ * For terminal states, also expires any open HIGH_PRIORITY_JOB actions.
  */
 function createApplicationEventHandler(
   eventType: DomainEventType,
@@ -222,12 +278,46 @@ function createApplicationEventHandler(
       `[EventHandler] ${eventType} — app=${payload.applicationId}, ` +
         `job=${payload.jobId}, user=${event.userId.substring(0, 8)}...`,
     );
-    // Future: trigger notifications, analytics aggregation, AI suggestions
+
+    // Generate career action from event
+    const generated = generateActionFromEvent(event);
+    if (generated) {
+      try {
+        await createAction(event.userId, {
+          type: generated.type,
+          priority: generated.priority,
+          title: generated.title,
+          description: generated.description,
+          applicationId: generated.applicationId,
+          jobId: generated.jobId,
+          interviewId: generated.interviewId,
+          dueAt: generated.dueAt,
+          expiresAt: generated.expiresAt,
+          actionUrl: generated.actionUrl,
+          sourceEventId: generated.sourceEventId,
+          actionKey: generated.actionKey,
+        });
+        console.log(
+          `[EventHandler] Created action: ${generated.type} for user=${event.userId.substring(0, 8)}...`,
+        );
+      } catch (error) {
+        console.error(
+          `[EventHandler] Failed to create action for ${eventType}:`,
+          error,
+        );
+      }
+    }
+
+    // Terminal state lifecycle: expire HIGH_PRIORITY_JOB actions when
+    // application becomes rejected, withdrawn, or accepted.
+    if (payload.newStatus && TERMINAL_STATUSES.has(payload.newStatus)) {
+      await expirePriorityActionsForJob(event.userId, payload.jobId);
+    }
   };
 }
 
 /**
- * Log-only handler for interview events.
+ * Log-and-create-action handler for interview events.
  */
 function createInterviewEventHandler(
   eventType: DomainEventType,
@@ -238,7 +328,35 @@ function createInterviewEventHandler(
       `[EventHandler] ${eventType} — interview=${payload.interviewId}, ` +
         `app=${payload.applicationId}, user=${event.userId.substring(0, 8)}...`,
     );
-    // Future: trigger interview prep suggestions, calendar integration
+
+    // Generate career action from event
+    const generated = generateActionFromEvent(event);
+    if (generated) {
+      try {
+        await createAction(event.userId, {
+          type: generated.type,
+          priority: generated.priority,
+          title: generated.title,
+          description: generated.description,
+          applicationId: generated.applicationId,
+          jobId: generated.jobId,
+          interviewId: generated.interviewId,
+          dueAt: generated.dueAt,
+          expiresAt: generated.expiresAt,
+          actionUrl: generated.actionUrl,
+          sourceEventId: generated.sourceEventId,
+          actionKey: generated.actionKey,
+        });
+        console.log(
+          `[EventHandler] Created action: ${generated.type} for user=${event.userId.substring(0, 8)}...`,
+        );
+      } catch (error) {
+        console.error(
+          `[EventHandler] Failed to create action for ${eventType}:`,
+          error,
+        );
+      }
+    }
   };
 }
 
