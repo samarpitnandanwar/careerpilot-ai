@@ -112,16 +112,16 @@ export type ApplicationUpdateInput = z.infer<typeof ApplicationUpdateSchema>;
 export const InterviewCreateSchema = z.object({
   applicationId: z.string().min(1, "Application ID is required"),
   scheduledAt: z.string().nullable().default(null),
-  interviewType: z.enum(["technical", "behavioral", "hr", "managerial", "other"]),
+  interviewType: z.enum(["technical", "behavioral", "hr", "managerial", "system_design", "case_study", "other"]),
   round: z.number().int().min(1).max(20).default(1),
   notes: z.string().max(5000).default(""),
 });
 
 export const InterviewUpdateSchema = z.object({
   scheduledAt: z.string().nullable().optional(),
-  interviewType: z.enum(["technical", "behavioral", "hr", "managerial", "other"]).optional(),
+  interviewType: z.enum(["technical", "behavioral", "hr", "managerial", "system_design", "case_study", "other"]).optional(),
   round: z.number().int().min(1).max(20).optional(),
-  status: z.string().max(50).optional(),
+  status: z.enum(["scheduled", "completed", "cancelled", "rescheduled"]).optional(),
   questions: z.array(z.string()).optional(),
   notes: z.string().max(5000).optional(),
   feedback: z.string().max(10000).optional(),

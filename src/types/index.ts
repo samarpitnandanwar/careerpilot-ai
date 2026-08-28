@@ -603,7 +603,64 @@ export type InterviewType =
   | "behavioral"
   | "hr"
   | "managerial"
+  | "system_design"
+  | "case_study"
   | "other";
+
+export type InterviewStatus =
+  | "scheduled"
+  | "completed"
+  | "cancelled"
+  | "rescheduled";
+
+// ---------------------------------------------------------------------------
+// AI: Interview Preparation (structured)
+// ---------------------------------------------------------------------------
+
+export type InterviewQuestionCategory =
+  | "technical"
+  | "behavioral"
+  | "experience"
+  | "project"
+  | "system_design"
+  | "situational"
+  | "company"
+  | "role_specific"
+  | "hr"
+  | "leadership";
+
+export type InterviewQuestionDifficulty = "easy" | "medium" | "hard";
+
+export interface InterviewPrepQuestion {
+  id: string;
+  question: string;
+  category: InterviewQuestionCategory;
+  difficulty: InterviewQuestionDifficulty;
+  whyLikely: string;
+  whatItEvaluates: string;
+  answerGuidance: string;
+  resumeEvidence: string[];
+  followUpQuestions: string[];
+}
+
+export interface FirestoreInterviewPrep {
+  id: string;
+  applicationId: string;
+  jobId: string;
+  resumeId: string;
+  interviewId: string | null;
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+  updatedAt: string;
+  overview: string;
+  questions: InterviewPrepQuestion[];
+  strengthsToEmphasize: string[];
+  gapsToPrepare: string[];
+  topicsToReview: string[];
+  finalTips: string[];
+  confidence: number;
+}
 
 export interface FirestoreNotification {
   id: string;

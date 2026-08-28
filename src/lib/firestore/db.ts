@@ -92,6 +92,23 @@ export function jobPriorityDoc(
   return jobPrioritiesCol(db, uid, jobId).doc(priorityId);
 }
 
+export function interviewPrepCol(
+  db: Firestore,
+  uid: string,
+  applicationId: string,
+) {
+  return col(db, "users", uid, "applications", applicationId, "interviewPrep");
+}
+
+export function interviewPrepDoc(
+  db: Firestore,
+  uid: string,
+  applicationId: string,
+  prepId: string,
+) {
+  return interviewPrepCol(db, uid, applicationId).doc(prepId);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
