@@ -66,6 +66,32 @@ export function activityCol(db: Firestore, uid: string) {
   return col(db, "users", uid, "activity");
 }
 
+export function jobAnalysesCol(db: Firestore, uid: string, jobId: string) {
+  return col(db, "users", uid, "jobs", jobId, "analyses");
+}
+
+export function jobAnalysisDoc(
+  db: Firestore,
+  uid: string,
+  jobId: string,
+  analysisId: string,
+) {
+  return jobAnalysesCol(db, uid, jobId).doc(analysisId);
+}
+
+export function jobPrioritiesCol(db: Firestore, uid: string, jobId: string) {
+  return col(db, "users", uid, "jobs", jobId, "priority");
+}
+
+export function jobPriorityDoc(
+  db: Firestore,
+  uid: string,
+  jobId: string,
+  priorityId: string,
+) {
+  return jobPrioritiesCol(db, uid, jobId).doc(priorityId);
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

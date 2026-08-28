@@ -26,6 +26,8 @@ export async function createResume(
       status: "uploaded",
       parsedData: null,
       active: false,
+      errorCode: null,
+      errorMessage: null,
     };
 
     await resumesCol(db, uid).doc(id).set(resume);
@@ -55,7 +57,7 @@ export async function getResume(
 export async function updateResume(
   uid: string,
   resumeId: string,
-  data: Partial<Pick<FirestoreResume, "status" | "parsedData" | "active" | "fileName">>,
+  data: Partial<Pick<FirestoreResume, "status" | "parsedData" | "active" | "fileName" | "errorCode" | "errorMessage">>,
 ): Promise<void> {
   return handleFirestoreError(async () => {
     const db = getDb();

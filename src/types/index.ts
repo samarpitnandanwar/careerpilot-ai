@@ -84,25 +84,48 @@ export interface Resume {
 export type ResumeStatus = "uploaded" | "parsing" | "parsed" | "error";
 
 export interface ParsedResume {
-  name: string;
-  email: string;
-  phone: string | null;
+  personal: {
+    name: string;
+    email: string;
+    phone: string | null;
+    location: string | null;
+  };
   summary: string;
-  skills: string[];
+  skills: {
+    technical: string[];
+    tools: string[];
+    frameworks: string[];
+    languages: string[];
+  };
   experience: ResumeExperience[];
   education: ResumeEducation[];
   certifications: string[];
   projects: ResumeProject[];
-  yearsOfExperience: number;
+  totalYearsExperience: number;
+  seniority: string;
+  domains: string[];
+  strengths: string[];
+  potentialGaps: string[];
+  careerSignals: string[];
+  // Legacy flat fields for backward compatibility
+  name: string;
   technologies: string[];
+  // Deprecated: use skills.technical + skills.tools + skills.frameworks
+  _legacy?: boolean;
 }
 
 export interface ResumeExperience {
   company: string;
-  title: string;
+  role: string;
   location: string | null;
   startDate: string;
   endDate: string | null;
+  current: boolean;
+  responsibilities: string[];
+  achievements: string[];
+  technologies: string[];
+  // Backward compat
+  title: string;
   description: string;
   skills: string[];
 }
@@ -247,6 +270,13 @@ export interface MatchEvidence {
   reason: string;
 }
 
+export interface SkillEvidence {
+  skill: string;
+  resumeEvidence: string;
+  jobRequirement: string;
+  match: "strong" | "partial" | "missing";
+}
+
 // ---------------------------------------------------------------------------
 // AI: Priority Score
 // ---------------------------------------------------------------------------
@@ -259,13 +289,40 @@ export interface PriorityScore {
   factors: PriorityFactor[];
 }
 
-export type PriorityLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+export type PriorityLevel = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "EXCLUDED";
+
+export type RecommendedAction =
+  | "APPLY_NOW"
+  | "PREPARE_APPLICATION"
+  | "FOLLOW_UP"
+  | "PREPARE_INTERVIEW"
+  | "COMPLETE_ASSESSMENT"
+  | "WAIT"
+  | "REVIEW_OFFER"
+  | "DEPRIORITIZE"
+  | "EXCLUDED";
 
 export interface PriorityFactor {
   name: string;
   weight: number;
   value: number;
   impact: string;
+  explanation: string;
+}
+
+export interface FirestoreJobPriority {
+  id: string;
+  jobId: string;
+  matchAnalysisId: string | null;
+  applicationId: string | null;
+  resumeId: string | null;
+  score: number;
+  level: PriorityLevel;
+  factors: PriorityFactor[];
+  explanation: string;
+  recommendedAction: RecommendedAction;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -426,6 +483,8 @@ export interface FirestoreResume {
   status: FirestoreResumeStatus;
   parsedData: ParsedResume | null;
   active: boolean;
+  errorCode: string | null;
+  errorMessage: string | null;
 }
 
 export type FirestoreResumeStatus =
@@ -446,7 +505,9 @@ export interface FirestoreJob {
   salary: string;
   skills: string[];
   requirements: string;
+  parsedData: ParsedJob | null;
   postedAt: string | null;
+  deadline: string | null;
   savedAt: string;
   status: FirestoreJobStatus;
   createdAt: string;
@@ -484,10 +545,43 @@ export interface FirestoreAnalysis {
   skillScore: number;
   experienceScore: number;
   educationScore: number;
+  seniorityScore?: number;
   matchedSkills: string[];
   missingSkills: string[];
+  matchedPreferredSkills?: string[];
+  skillEvidence?: SkillEvidence[];
+  experienceGaps?: ExperienceGap[];
+  strengths?: string[];
+  gaps?: string[];
   evidence: MatchEvidence[];
   recommendation: MatchRecommendation;
+  confidence?: number;
+  summary?: string;
+}
+
+export interface FirestoreJobAnalysis {
+  id: string;
+  jobId: string;
+  resumeId: string;
+  model: string;
+  promptVersion: string;
+  createdAt: string;
+  overallScore: number;
+  skillScore: number;
+  experienceScore: number;
+  educationScore: number;
+  seniorityScore: number;
+  matchedSkills: string[];
+  missingSkills: string[];
+  matchedPreferredSkills: string[];
+  skillEvidence: SkillEvidence[];
+  experienceGaps: ExperienceGap[];
+  strengths: string[];
+  gaps: string[];
+  evidence: MatchEvidence[];
+  recommendation: MatchRecommendation;
+  confidence: number;
+  summary: string;
 }
 
 export interface FirestoreInterview {

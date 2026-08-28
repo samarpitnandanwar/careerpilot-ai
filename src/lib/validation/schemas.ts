@@ -59,6 +59,7 @@ export const JobCreateSchema = z.object({
   skills: z.array(z.string().max(100)).max(50).default([]),
   requirements: z.string().max(10000).default(""),
   postedAt: z.string().nullable().default(null),
+  deadline: z.string().nullable().default(null),
 });
 
 export const JobUpdateSchema = z.object({
@@ -72,6 +73,7 @@ export const JobUpdateSchema = z.object({
   salary: z.string().max(100).optional(),
   skills: z.array(z.string().max(100)).max(50).optional(),
   requirements: z.string().max(10000).optional(),
+  deadline: z.string().nullable().optional(),
   status: z.enum(["saved", "interested", "applied", "closed"]).optional(),
 });
 

@@ -1,56 +1,147 @@
-import type { Metadata } from "next";
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
   Briefcase,
   Users,
   Award,
   Target,
-  Clock,
-  TrendingUp,
-  AlertTriangle,
-  Activity,
+  Loader2,
 } from "lucide-react";
 import { ProtectedLayout } from "@/components/auth/protected-layout";
-import Link from "next/link";
 import { Card, CardHeader, StatCard, Badge } from "@/components/ui";
+import type { FirestoreJobPriority } from "@/types";
+import { getDaysUntilDeadline, isDeadlineExpired } from "@/lib/priority/scorer";
 
-export const metadata: Metadata = {
-  title: "Dashboard",
-};
+interface DashboardJob {
+  jobId: string;
+  title: string;
+  company: string;
+  deadline: string | null;
+  priority: FirestoreJobPriority;
+}
 
-// Placeholder data — will be replaced with real Firestore + AI data
-const stats = [
-  { label: "Applications", value: 12, icon: <Briefcase size={20} />, trend: { value: 20, isPositive: true } },
-  { label: "Interviews", value: 3, icon: <Users size={20} />, trend: { value: 50, isPositive: true } },
-  { label: "Offers", value: 1, icon: <Award size={20} /> },
-  { label: "Avg Match Score", value: "76%", icon: <Target size={20} /> },
-];
-
-const upcomingDeadlines = [
-  { id: "1", title: "Senior Frontend Engineer", company: "Google", deadline: "2026-08-30", daysLeft: 3 },
-  { id: "2", title: "Full Stack Developer", company: "Stripe", deadline: "2026-09-01", daysLeft: 5 },
-  { id: "3", title: "Software Engineer II", company: "Microsoft", deadline: "2026-09-05", daysLeft: 9 },
-];
-
-const highPriorityJobs = [
-  { id: "1", title: "Senior Frontend Engineer", company: "Google", matchScore: 91, priority: "HIGH" as const },
-  { id: "2", title: "Staff Engineer", company: "Vercel", matchScore: 87, priority: "HIGH" as const },
-  { id: "3", title: "Lead Software Engineer", company: "Atlassian", matchScore: 78, priority: "MEDIUM" as const },
-];
-
-const skillGaps = [
-  { skill: "Kubernetes", severity: "critical" as const },
-  { skill: "System Design", severity: "minor" as const },
-  { skill: "AWS Lambda", severity: "moderate" as const },
-];
-
-const recentActivity = [
-  { id: "1", type: "application" as const, title: "Applied to Senior Frontend Engineer at Google", time: "2 hours ago" },
-  { id: "2", type: "job" as const, title: "Added Staff Engineer at Vercel", time: "5 hours ago" },
-  { id: "3", type: "resume" as const, title: "Resume analyzed successfully", time: "1 day ago" },
-  { id: "4", type: "application" as const, title: "Moved to Interview stage at Meta", time: "2 days ago" },
-];
+function formatDeadline(deadline: string | null): { text: string; color: string } {
+  if (!deadline) {
+    return { text: "Not specified", color: "text-slate-400" };
+  }
+  if (isDeadlineExpired(deadline)) {
+    return { text: "Expired", color: "text-red-500" };
+  }
+  const days = getDaysUntilDeadline(deadline);
+  if (days === null) {
+    return { text: "Invalid date", color: "text-slate-400" };
+  }
+  if (days === 0) return { text: "Today", color: "text-red-600 font-semibold" };
+  if (days === 1) return { text: "Tomorrow", color: "text-red-500 font-medium" };
+  if (days <= 7) return { text: `${days} days`, color: "text-amber-600" };
+  if (days <= 30) return { text: `${days} days`, color: "text-slate-600" };
+  return { text: `${days} days`, color: "text-slate-400" };
+}
 
 export default function DashboardPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stats, setStats] = useState({
+    applications: 0,
+    interviews: 0,
+    offers: 0,
+    avgMatch: 0,
+  });
+  const [priorityJobs, setPriorityJobs] = useState<DashboardJob[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        const token = await getToken();
+        if (!token) {
+          if (!cancelled) setError("Not authenticated");
+          return;
+        }
+
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // Load priority data (includes job details now)
+        const priorityRes = await fetch("/api/priority", { headers });
+        const priorityData = await priorityRes.json();
+
+        if (!cancelled && priorityData.success && priorityData.data) {
+          const priorities = priorityData.data.priorities as {
+            jobId: string;
+            title: string;
+            company: string;
+            deadline: string | null;
+            priority: FirestoreJobPriority;
+          }[];
+
+          // Use job details directly from the priority API response
+          const topJobs: DashboardJob[] = priorities.slice(0, 5).map((p) => ({
+            jobId: p.jobId,
+            title: p.title,
+            company: p.company,
+            deadline: p.deadline,
+            priority: p.priority,
+          }));
+
+          if (!cancelled) setPriorityJobs(topJobs);
+        }
+
+        // Load applications for stats
+        const appsRes = await fetch("/api/applications", { headers });
+        const appsData = await appsRes.json();
+        if (!cancelled && appsData.success && appsData.data) {
+          const apps = appsData.data;
+          const interviewCount = apps.filter(
+            (a: { status: string }) => a.status === "interview",
+          ).length;
+          const offerCount = apps.filter(
+            (a: { status: string }) => a.status === "offer",
+          ).length;
+          setStats({
+            applications: apps.length,
+            interviews: interviewCount,
+            offers: offerCount,
+            avgMatch: 0,
+          });
+        }
+      } catch {
+        if (!cancelled) setError("Failed to load dashboard data");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loading) {
+    return (
+      <ProtectedLayout>
+        <div className="flex items-center justify-center py-20">
+          <Loader2 size={24} className="animate-spin text-blue-600" />
+        </div>
+      </ProtectedLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <ProtectedLayout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
+            <p className="mt-1 text-sm text-red-500">{error}</p>
+          </div>
+        </div>
+      </ProtectedLayout>
+    );
+  }
+
   return (
     <ProtectedLayout>
       <div className="space-y-6">
@@ -64,22 +155,33 @@ export default function DashboardPage() {
 
         {/* Stats grid */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <StatCard
-              key={stat.label}
-              label={stat.label}
-              value={stat.value}
-              icon={stat.icon}
-              trend={stat.trend}
-            />
-          ))}
+          <StatCard
+            label="Applications"
+            value={stats.applications}
+            icon={<Briefcase size={20} />}
+          />
+          <StatCard
+            label="Interviews"
+            value={stats.interviews}
+            icon={<Users size={20} />}
+          />
+          <StatCard
+            label="Offers"
+            value={stats.offers}
+            icon={<Award size={20} />}
+          />
+          <StatCard
+            label="Avg Match Score"
+            value={stats.avgMatch > 0 ? `${stats.avgMatch}%` : "—"}
+            icon={<Target size={20} />}
+          />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
-          {/* High-priority jobs */}
+          {/* High-priority jobs — real data */}
           <Card className="lg:col-span-2">
             <CardHeader
-              title="High-Priority Jobs"
+              title="Priority Jobs"
               subtitle="AI-ranked opportunities you should focus on"
               action={
                 <Link href="/jobs" className="text-sm font-medium text-blue-600 hover:text-blue-500">
@@ -88,142 +190,93 @@ export default function DashboardPage() {
               }
             />
             <div className="space-y-3">
-              {highPriorityJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50"
-                >
-                  <div>
-                    <p className="font-medium text-slate-900">{job.title}</p>
-                    <p className="text-sm text-slate-500">{job.company}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-blue-600">
-                      {job.matchScore}% match
-                    </span>
-                    <Badge
-                      variant={
-                        job.priority === "HIGH"
-                          ? "danger"
-                          : job.priority === "MEDIUM"
-                            ? "warning"
-                            : "default"
-                      }
-                    >
-                      {job.priority}
-                    </Badge>
-                  </div>
+              {priorityJobs.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-slate-400">
+                    No jobs with priority scores yet. Add jobs and run match analysis to see rankings.
+                  </p>
                 </div>
-              ))}
+              ) : (
+                priorityJobs.map((job) => {
+                  const deadline = formatDeadline(job.deadline);
+                  return (
+                    <Link key={job.jobId} href={`/jobs/${job.jobId}`}>
+                      <div className="flex items-center justify-between rounded-lg border border-slate-100 p-3 transition-colors hover:bg-slate-50 cursor-pointer">
+                        <div>
+                          <p className="font-medium text-slate-900">{job.title}</p>
+                          <p className="text-sm text-slate-500">{job.company}</p>
+                          <p className={`text-xs mt-0.5 ${deadline.color}`}>
+                            Deadline: {deadline.text}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span className="text-sm font-semibold text-blue-600">
+                              {job.priority.score} priority
+                            </span>
+                          </div>
+                          <Badge
+                            variant={
+                              job.priority.level === "CRITICAL"
+                                ? "danger"
+                                : job.priority.level === "HIGH"
+                                  ? "danger"
+                                  : job.priority.level === "MEDIUM"
+                                    ? "warning"
+                                    : "default"
+                            }
+                          >
+                            {job.priority.level}
+                          </Badge>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })
+              )}
             </div>
           </Card>
 
-          {/* Upcoming deadlines */}
+          {/* Skill gaps — placeholder until analytics */}
           <Card>
-            <CardHeader
-              title="Upcoming Deadlines"
-              subtitle="Don't miss these"
-            />
-            <div className="space-y-3">
-              {upcomingDeadlines.map((dl) => (
-                <div
-                  key={dl.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 p-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{dl.title}</p>
-                    <p className="text-xs text-slate-500">{dl.company}</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-sm">
-                    <Clock size={14} className="text-slate-400" />
-                    <span
-                      className={
-                        dl.daysLeft <= 3
-                          ? "font-semibold text-red-600"
-                          : "text-slate-600"
-                      }
-                    >
-                      {dl.daysLeft}d
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <CardHeader title="Skill Gaps" subtitle="Skills to develop" />
+            <div className="py-8 text-center">
+              <p className="text-sm text-slate-400">
+                Skill gap analysis will appear here after running multiple match analyses.
+              </p>
             </div>
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Skill gaps */}
-          <Card>
-            <CardHeader
-              title="Skill Gaps"
-              subtitle="Skills to develop"
-            />
-            <div className="space-y-2">
-              {skillGaps.map((gap) => (
-                <div
-                  key={gap.skill}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 p-3"
-                >
-                  <span className="text-sm font-medium text-slate-700">
-                    {gap.skill}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <AlertTriangle
-                      size={14}
-                      className={
-                        gap.severity === "critical"
-                          ? "text-red-500"
-                          : gap.severity === "moderate"
-                            ? "text-yellow-500"
-                            : "text-slate-400"
-                      }
-                    />
-                    <span className="text-xs capitalize text-slate-500">
-                      {gap.severity}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          {/* Recent activity */}
-          <Card className="lg:col-span-2">
-            <CardHeader
-              title="Recent Activity"
-              subtitle="Your latest actions"
-              action={
-                <Link href="/applications" className="text-sm font-medium text-blue-600 hover:text-blue-500">
-                  View all →
-                </Link>
-              }
-            />
-            <div className="space-y-3">
-              {recentActivity.map((item) => {
-                const icons = {
-                  application: <Briefcase size={16} className="text-blue-500" />,
-                  job: <TrendingUp size={16} className="text-green-500" />,
-                  resume: <Activity size={16} className="text-purple-500" />,
-                  interview: <Users size={16} className="text-orange-500" />,
-                };
-                return (
-                  <div
-                    key={item.id}
-                    className="flex items-start gap-3 rounded-lg border border-slate-100 p-3"
-                  >
-                    <div className="mt-0.5">{icons[item.type]}</div>
-                    <div className="flex-1">
-                      <p className="text-sm text-slate-700">{item.title}</p>
-                      <p className="text-xs text-slate-400">{item.time}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
+        {/* Recent activity — placeholder */}
+        <Card>
+          <CardHeader
+            title="Recent Activity"
+            subtitle="Your latest actions"
+          />
+          <div className="py-8 text-center">
+            <p className="text-sm text-slate-400">
+              Activity timeline will appear here as you use CareerPilot AI.
+            </p>
+          </div>
+        </Card>
       </div>
     </ProtectedLayout>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Helper — get Firebase ID token
+// ---------------------------------------------------------------------------
+
+async function getToken(): Promise<string | null> {
+  try {
+    const { getAuth } = await import("firebase/auth");
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return null;
+    return user.getIdToken();
+  } catch {
+    return null;
+  }
 }
