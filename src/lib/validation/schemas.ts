@@ -74,7 +74,8 @@ export const JobUpdateSchema = z.object({
   skills: z.array(z.string().max(100)).max(50).optional(),
   requirements: z.string().max(10000).optional(),
   deadline: z.string().nullable().optional(),
-  status: z.enum(["saved", "interested", "applied", "closed"]).optional(),
+  // NOTE: status is intentionally excluded — job status must be
+  // server-controlled. Clients cannot change it via PATCH.
 });
 
 export type JobCreateInput = z.infer<typeof JobCreateSchema>;

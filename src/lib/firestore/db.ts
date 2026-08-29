@@ -125,6 +125,14 @@ export function actionDoc(db: Firestore, uid: string, actionId: string) {
   return actionsCol(db, uid).doc(actionId);
 }
 
+export function systemCol(db: Firestore, uid: string) {
+  return col(db, "users", uid, "system");
+}
+
+export function systemDoc(db: Firestore, uid: string, docId: string) {
+  return systemCol(db, uid).doc(docId);
+}
+
 export function eventProcessingCol(db: Firestore, uid: string) {
   return col(db, "users", uid, "eventProcessing");
 }

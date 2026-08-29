@@ -2,6 +2,8 @@
 // CareerPilot AI — Events Barrel Export
 // ============================================================================
 
+import "server-only";
+
 export {
   publishDomainEvent,
   emitInProcessEvent,

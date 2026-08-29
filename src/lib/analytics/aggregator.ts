@@ -77,7 +77,7 @@ export function aggregateAnalytics(params: {
   const skillAnalysis = calculateSkillAnalysis(filteredApps, analyses);
 
   // Resume analysis
-  const resumeAnalysis = calculateResumeAnalysis(filteredApps);
+  const resumeAnalysis = calculateResumeAnalysis(filteredApps, analyses);
 
   // Source analysis
   const sourceAnalysis = calculateSourceAnalysis(filteredApps);
@@ -383,10 +383,14 @@ function calculateSkillAnalysis(
 // Resume Analysis
 // ---------------------------------------------------------------------------
 
-function calculateResumeAnalysis(apps: FirestoreApplication[]): ResumeAnalysis[] {
+function calculateResumeAnalysis(
+  apps: FirestoreApplication[],
+  analyses: FirestoreJobAnalysis[],
+): ResumeAnalysis[] {
+  // Group applications by resumeId
   const resumeMap = new Map<
     string,
-    { fileName: string; apps: FirestoreApplication[]; scores: number[] }
+    { fileName: string; apps: FirestoreApplication[] }
   >();
 
   for (const app of apps) {
@@ -394,24 +398,42 @@ function calculateResumeAnalysis(apps: FirestoreApplication[]): ResumeAnalysis[]
     const existing = resumeMap.get(app.resumeId) ?? {
       fileName: app.resumeId,
       apps: [],
-      scores: [],
     };
     existing.apps.push(app);
     resumeMap.set(app.resumeId, existing);
   }
 
-  return Array.from(resumeMap.entries()).map(([resumeId, data]) => ({
-    resumeId,
-    fileName: data.fileName,
-    applications: data.apps.length,
-    interviews: data.apps.filter((a) =>
-      ["interview", "offer", "accepted"].includes(a.status),
-    ).length,
-    offers: data.apps.filter((a) =>
-      ["offer", "accepted"].includes(a.status),
-    ).length,
-    avgMatchScore: data.scores.length > 0 ? mean(data.scores) : 0,
-  }));
+  // Group analyses by resumeId and collect scores
+  const resumeScores = new Map<string, number[]>();
+  for (const analysis of analyses) {
+    // Only use analyses that have a valid resumeId
+    if (!analysis.resumeId) continue;
+
+    const existing = resumeScores.get(analysis.resumeId) ?? [];
+    existing.push(analysis.overallScore);
+    resumeScores.set(analysis.resumeId, existing);
+  }
+
+  // Build results for resumes that have applications
+  const results: ResumeAnalysis[] = [];
+  for (const [resumeId, data] of resumeMap) {
+    const scores = resumeScores.get(resumeId) ?? [];
+
+    results.push({
+      resumeId,
+      fileName: data.fileName,
+      applications: data.apps.length,
+      interviews: data.apps.filter((a) =>
+        ["interview", "offer", "accepted"].includes(a.status),
+      ).length,
+      offers: data.apps.filter((a) =>
+        ["offer", "accepted"].includes(a.status),
+      ).length,
+      avgMatchScore: scores.length > 0 ? mean(scores) : null,
+    });
+  }
+
+  return results;
 }
 
 // ---------------------------------------------------------------------------

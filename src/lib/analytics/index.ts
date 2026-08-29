@@ -1,3 +1,5 @@
+import "server-only";
+
 export { aggregateAnalytics } from "./aggregator";
 export { calculateCoreMetrics, filterByRange } from "./metrics";
 export { calculateFunnel } from "./funnel";

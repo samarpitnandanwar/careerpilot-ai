@@ -1,3 +1,5 @@
+import "server-only";
+
 export {
   generateActionFromEvent,
   generateActionKey,
@@ -17,7 +19,7 @@ export {
   reopenAction,
   expireActions,
 } from "./service";
-export { reconcileUserActions } from "./reconcile";
+export { reconcileUserActions, reconcileWithTTL, ACTION_RECONCILIATION_TTL_MS } from "./reconcile";
 export type { ReconcileInput, ReconcileResult } from "./reconcile";
 export type {
   FirestoreAction,

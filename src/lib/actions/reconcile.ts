@@ -12,6 +12,10 @@
 //   - user-scoped
 //   - server-side only
 //   - NO Gemini calls
+//
+// Performance: reconciliation is rate-limited to at most once per user
+// within ACTION_RECONCILIATION_TTL_MS. A Firestore-backed per-user marker
+// ensures this works across multiple server instances.
 // ============================================================================
 
 import type {
@@ -26,7 +30,17 @@ import {
   shouldExpirePriorityAction,
 } from "./generator";
 import { createAction } from "./service";
-import { now } from "@/lib/firestore/db";
+import { getDb, now } from "@/lib/firestore/db";
+
+// ---------------------------------------------------------------------------
+// Reconciliation TTL
+// ---------------------------------------------------------------------------
+
+/**
+ * How often reconciliation may run per user. 5 minutes.
+ * Change this single constant to adjust the TTL globally.
+ */
+export const ACTION_RECONCILIATION_TTL_MS = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Reconcile inputs
@@ -42,10 +56,177 @@ export interface ReconcileInput {
 export interface ReconcileResult {
   actionsCreated: number;
   actionsExpired: number;
+  skipped: boolean;
 }
 
 // ---------------------------------------------------------------------------
-// Main reconciliation
+// Firestore reconciliation marker
+// ---------------------------------------------------------------------------
+
+interface ReconciliationMarker {
+  lastReconciledAt: string;
+  reconciling: boolean;
+  startedAt: string | null;
+}
+
+/**
+ * Check if reconciliation should run and atomically claim the reconciliation
+ * window using a Firestore transaction.
+ *
+ * Returns { shouldReconcile: true } if this request should perform
+ * reconciliation, or { shouldReconcile: false } if another request is already
+ * reconciling or the TTL hasn't expired.
+ */
+async function claimReconciliation(uid: string): Promise<{ shouldReconcile: boolean }> {
+  const db = getDb();
+  const markerRef = db
+    .collection("users")
+    .doc(uid)
+    .collection("system")
+    .doc("actionReconciliation");
+
+  try {
+    await db.runTransaction(async (txn) => {
+      const snap = await txn.get(markerRef);
+      const marker = snap.exists ? (snap.data() as ReconciliationMarker) : null;
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+
+      if (marker) {
+        // Check if another request is currently reconciling
+        if (marker.reconciling) {
+          // Another request is reconciling — skip
+          return;
+        }
+
+        // Check TTL
+        if (marker.lastReconciledAt) {
+          const lastMs = new Date(marker.lastReconciledAt).getTime();
+          if (nowMs - lastMs < ACTION_RECONCILIATION_TTL_MS) {
+            // TTL hasn't expired — skip
+            return;
+          }
+        }
+
+        // TTL expired or no previous reconciliation — claim
+        txn.set(markerRef, {
+          lastReconciledAt: marker.lastReconciledAt ?? "",
+          reconciling: true,
+          startedAt: nowIso,
+        } satisfies ReconciliationMarker);
+      } else {
+        // No marker exists — create and claim
+        txn.set(markerRef, {
+          lastReconciledAt: "",
+          reconciling: true,
+          startedAt: nowIso,
+        } satisfies ReconciliationMarker);
+      }
+    });
+  } catch {
+    // If transaction fails, allow reconciliation to proceed (safe fallback)
+    return { shouldReconcile: true };
+  }
+
+  // Read back the marker to determine if we won the claim
+  const finalSnap = await markerRef.get();
+  const finalMarker = finalSnap.exists ? (finalSnap.data() as ReconciliationMarker) : null;
+  if (finalMarker?.reconciling && finalMarker.startedAt) {
+    // We set reconciling=true. Check if we're the latest claimer
+    const nowMs = Date.now();
+    const startedMs = new Date(finalMarker.startedAt).getTime();
+    // If started within last 30 seconds, we're likely the claimer
+    if (nowMs - startedMs < 30000) {
+      return { shouldReconcile: true };
+    }
+  }
+
+  return { shouldReconcile: false };
+}
+
+/**
+ * Mark reconciliation as complete and refresh the TTL.
+ */
+async function completeReconciliation(uid: string): Promise<void> {
+  const db = getDb();
+  const markerRef = db
+    .collection("users")
+    .doc(uid)
+    .collection("system")
+    .doc("actionReconciliation");
+
+  try {
+    await markerRef.set({
+      lastReconciledAt: now(),
+      reconciling: false,
+      startedAt: null,
+    } satisfies ReconciliationMarker);
+  } catch {
+    // Don't fail the API if marker update fails
+    console.error("[Reconcile] Failed to update reconciliation marker");
+  }
+}
+
+/**
+ * Clear the reconciling flag without refreshing the TTL.
+ * Used when reconciliation fails so future requests can retry.
+ */
+async function releaseReconciliationClaim(uid: string): Promise<void> {
+  const db = getDb();
+  const markerRef = db
+    .collection("users")
+    .doc(uid)
+    .collection("system")
+    .doc("actionReconciliation");
+
+  try {
+    const snap = await markerRef.get();
+    if (snap.exists) {
+      const marker = snap.data() as ReconciliationMarker;
+      await markerRef.set({
+        ...marker,
+        reconciling: false,
+        startedAt: null,
+      } satisfies ReconciliationMarker);
+    }
+  } catch {
+    // Best effort
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public: Reconcile with TTL guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempt reconciliation with TTL gating. If reconciliation was recently
+ * performed (within ACTION_RECONCILIATION_TTL_MS), skip it.
+ *
+ * Always returns current reconciliation status so the caller knows
+ * whether to proceed.
+ */
+export async function reconcileWithTTL(
+  input: ReconcileInput,
+): Promise<ReconcileResult> {
+  const { shouldReconcile } = await claimReconciliation(input.uid);
+
+  if (!shouldReconcile) {
+    return { actionsCreated: 0, actionsExpired: 0, skipped: true };
+  }
+
+  try {
+    const result = await reconcileUserActions(input);
+    await completeReconciliation(input.uid);
+    return { ...result, skipped: false };
+  } catch (error) {
+    // Release the claim so future requests can retry
+    await releaseReconciliationClaim(input.uid);
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main reconciliation (called when TTL allows)
 // ---------------------------------------------------------------------------
 
 /**
@@ -60,7 +241,7 @@ export interface ReconcileResult {
  */
 export async function reconcileUserActions(
   input: ReconcileInput,
-): Promise<ReconcileResult> {
+): Promise<Omit<ReconcileResult, "skipped">> {
   const { uid, applications, interviews, priorityScores } = input;
   let actionsCreated = 0;
   let actionsExpired = 0;
@@ -461,39 +642,49 @@ async function expireTerminalStateActions(
   let count = 0;
   const nowStr = now();
 
+  // Collect jobIds from terminal-state applications
+  const terminalJobIds = new Set<string>();
   for (const app of applications) {
     if (!shouldExpirePriorityAction(app.status)) continue;
+    if (app.jobId) terminalJobIds.add(app.jobId);
+  }
 
-    // Look for open HIGH_PRIORITY_JOB actions for this application's job
-    try {
-      const { getActions } = await import("./service");
-      const openActions = await getActions(uid, { status: "OPEN", limit: 100 });
+  if (terminalJobIds.size === 0) return 0;
 
-      for (const action of openActions) {
-        if (
-          action.type === "HIGH_PRIORITY_JOB" &&
-          action.jobId === app.jobId &&
-          action.status === "OPEN"
-        ) {
-          // Expire the action
-          const { getDb } = await import("@/lib/firestore/db");
-          const db = getDb();
-          await db
-            .collection("users")
-            .doc(uid)
-            .collection("actions")
-            .doc(action.id)
-            .update({
-              status: "EXPIRED",
-              completedAt: nowStr,
-            });
-          count++;
-        }
+  // Single query: fetch all OPEN HIGH_PRIORITY_JOB actions for this user
+  try {
+    const { getActions } = await import("./service");
+    const openActions = await getActions(uid, { status: "OPEN", limit: 100 });
+
+    // Filter in-memory to find actions matching terminal-state jobIds
+    const actionsToExpire = openActions.filter(
+      (action) =>
+        action.type === "HIGH_PRIORITY_JOB" &&
+        action.jobId !== null &&
+        terminalJobIds.has(action.jobId),
+    );
+
+    // Batch update all matching actions
+    if (actionsToExpire.length > 0) {
+      const db = getDb();
+      const batch = db.batch();
+      for (const action of actionsToExpire) {
+        const actionRef = db
+          .collection("users")
+          .doc(uid)
+          .collection("actions")
+          .doc(action.id);
+        batch.update(actionRef, {
+          status: "EXPIRED",
+          completedAt: nowStr,
+        });
       }
-    } catch {
-      // Don't fail reconciliation if lifecycle update fails
-      console.error(`[Reconcile] Failed to expire actions for application ${app.id}`);
+      await batch.commit();
+      count = actionsToExpire.length;
     }
+  } catch {
+    // Don't fail reconciliation if lifecycle update fails
+    console.error("[Reconcile] Failed to expire terminal-state actions");
   }
 
   return count;

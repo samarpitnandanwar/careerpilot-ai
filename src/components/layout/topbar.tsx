@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Search, ChevronDown } from "lucide-react";
+import { Search, ChevronDown } from "lucide-react";
+import { NotificationCenter } from "@/components/notifications/notification-center";
 
 export function TopBar() {
   return (
@@ -20,10 +21,7 @@ export function TopBar() {
 
       {/* Actions */}
       <div className="flex items-center gap-4">
-        <button className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100">
-          <Bell size={20} />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-        </button>
+        <NotificationCenter />
 
         <Link
           href="/settings"

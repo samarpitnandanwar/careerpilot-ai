@@ -5,47 +5,40 @@
 import {
   requireUser,
   jsonOk,
-  jsonCreated,
   jsonError,
   jsonInternal,
 } from "@/lib/api-helpers";
 import {
-  createNotification,
   getNotifications,
+  getUnreadCount,
   markAllNotificationsRead,
-} from "@/lib/firestore/notifications";
-import { NotificationCreateSchema } from "@/lib/validation/schemas";
+} from "@/lib/notifications/service";
 
 export async function GET(request: Request) {
   const [user, err] = await requireUser(request);
   if (err) return err;
 
   try {
-    const notifications = await getNotifications(user.uid);
-    return jsonOk(notifications);
-  } catch (error) {
-    return jsonInternal(error instanceof Error ? error.message : "Failed to get notifications");
-  }
-}
+    const url = new URL(request.url);
+    const statusParam = url.searchParams.get("status");
+    const limitParam = url.searchParams.get("limit");
 
-export async function POST(request: Request) {
-  const [user, err] = await requireUser(request);
-  if (err) return err;
+    const status = statusParam && ["unread", "read"].includes(statusParam)
+      ? (statusParam as "unread" | "read")
+      : undefined;
+    const limit = limitParam ? parseInt(limitParam, 10) : undefined;
 
-  try {
-    const body = await request.json();
-    const parsed = NotificationCreateSchema.safeParse(body);
+    const notifications = await getNotifications(user.uid, { status, limit });
 
-    if (!parsed.success) {
-      const message = parsed.error.issues.map((i) => i.message).join(", ");
-      return jsonError(`Validation failed: ${message}`);
+    // If requesting unread, also include count
+    if (status === "unread") {
+      const count = await getUnreadCount(user.uid);
+      return jsonOk({ notifications, unreadCount: count });
     }
 
-    const notification = await createNotification(user.uid, parsed.data);
-    return jsonCreated(notification);
-  } catch (error) {
-    if (error instanceof SyntaxError) return jsonError("Invalid JSON body");
-    return jsonInternal(error instanceof Error ? error.message : "Failed to create notification");
+    return jsonOk(notifications);
+  } catch {
+    return jsonInternal("Failed to get notifications");
   }
 }
 
@@ -57,11 +50,11 @@ export async function PATCH(request: Request) {
   try {
     const body = await request.json();
     if (body.action === "markAllRead") {
-      await markAllNotificationsRead(user.uid);
-      return jsonOk({ updated: true });
+      const count = await markAllNotificationsRead(user.uid);
+      return jsonOk({ updated: true, count });
     }
     return jsonError("Unknown action");
-  } catch (error) {
-    return jsonInternal(error instanceof Error ? error.message : "Failed to update notifications");
+  } catch {
+    return jsonInternal("Failed to update notifications");
   }
 }

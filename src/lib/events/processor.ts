@@ -23,6 +23,8 @@ import { getDb, now } from "@/lib/firestore/db";
 import { handleFirestoreError } from "@/lib/api-helpers";
 import { generateActionFromEvent } from "@/lib/actions/generator";
 import { createAction } from "@/lib/actions/service";
+import { generateNotificationFromEvent } from "@/lib/notifications/generator";
+import { createNotification } from "@/lib/notifications/service";
 
 // ---------------------------------------------------------------------------
 // Event processing record (idempotency)
@@ -308,6 +310,17 @@ function createApplicationEventHandler(
       }
     }
 
+    // Generate user-facing notification from event (fire-and-forget)
+    const notif = generateNotificationFromEvent(event);
+    if (notif) {
+      createNotification(event.userId, notif).catch((error) => {
+        console.error(
+          `[EventHandler] Failed to create notification for ${eventType}:`,
+          error,
+        );
+      });
+    }
+
     // Terminal state lifecycle: expire HIGH_PRIORITY_JOB actions when
     // application becomes rejected, withdrawn, or accepted.
     if (payload.newStatus && TERMINAL_STATUSES.has(payload.newStatus)) {
@@ -357,6 +370,17 @@ function createInterviewEventHandler(
         );
       }
     }
+
+    // Generate user-facing notification from event (fire-and-forget)
+    const notif = generateNotificationFromEvent(event);
+    if (notif) {
+      createNotification(event.userId, notif).catch((error) => {
+        console.error(
+          `[EventHandler] Failed to create notification for ${eventType}:`,
+          error,
+        );
+      });
+    }
   };
 }
 
@@ -377,6 +401,7 @@ export function registerDefaultHandlers(): void {
 
   // Interview
   registerEventHandler("INTERVIEW_SCHEDULED", createInterviewEventHandler("INTERVIEW_SCHEDULED"));
+  registerEventHandler("INTERVIEW_REMINDER", createInterviewEventHandler("INTERVIEW_REMINDER"));
   registerEventHandler("INTERVIEW_COMPLETED", createInterviewEventHandler("INTERVIEW_COMPLETED"));
 
   // Resume

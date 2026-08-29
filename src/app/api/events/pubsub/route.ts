@@ -9,9 +9,9 @@
 //
 // Security:
 //   - Production: authentication is MANDATORY.
-//     Accepts:
+//     Accepts ONLY:
 //       1. Google-signed OIDC token (authenticated Pub/Sub push)
-//       2. Pub/Sub verification token header (legacy push)
+//     The legacy X-Goog-Pubsub-Verification-Token header is NOT accepted.
 //     Rejects all unauthenticated requests with 401.
 //
 //   - Development: a controlled bypass is available ONLY when
@@ -33,7 +33,7 @@ import type { DomainEventEnvelope } from "@/types";
 
 export async function POST(request: Request) {
   // ---- Authentication ----
-  // Production: require valid OIDC token or Pub/Sub verification token.
+  // Production: require valid OIDC token (authenticated Pub/Sub push).
   // Development: optional bypass via EVENT_ENDPOINT_DEV_SECRET header.
   const authResult = await verifyPubSubRequest(request);
 

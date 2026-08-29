@@ -37,8 +37,16 @@ export function jsonConflict(message = "Resource already exists") {
   return jsonError(message, 409);
 }
 
-export function jsonInternal(message = "Internal server error") {
-  return jsonError(message, 500);
+/**
+ * Always returns a safe generic 500 error to the client.
+ * Never leaks internal error details (Firestore, Google API, etc.).
+ * The message parameter is logged server-side but NOT sent to the client.
+ */
+export function jsonInternal(message?: string) {
+  if (message) {
+    console.error("[API] Internal error detail:", message);
+  }
+  return jsonError("Internal server error", 500);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,10 +80,9 @@ export async function handleFirestoreError<T>(
   try {
     return await operation();
   } catch (error) {
+    // Log detailed error server-side only — never expose to client
     console.error("[Firestore] Operation failed:", error);
-    throw new FirestoreOperationError(
-      error instanceof Error ? error.message : "Unknown database error",
-    );
+    throw new FirestoreOperationError("Database operation failed");
   }
 }
 

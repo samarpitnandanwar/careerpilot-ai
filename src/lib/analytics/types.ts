@@ -153,7 +153,7 @@ export interface ResumeAnalysis {
   applications: number;
   interviews: number;
   offers: number;
-  avgMatchScore: number;
+  avgMatchScore: number | null;
 }
 
 export interface SourceAnalysis {

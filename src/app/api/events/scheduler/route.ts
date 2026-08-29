@@ -29,10 +29,7 @@ import { getDb } from "@/lib/firestore/db";
 import { now } from "@/lib/firestore/db";
 import { publishDomainEvent, type EventContext } from "@/lib/events/publisher";
 import { isEventProcessed } from "@/lib/events/processor";
-import {
-  verifySchedulerRequest,
-  isAcceptedSchedulerIdentity,
-} from "@/lib/events/auth";
+import { verifySchedulerRequest } from "@/lib/events/auth";
 import type {
   FirestoreApplication,
   FirestoreInterview,
@@ -84,16 +81,9 @@ export async function POST(request: Request) {
     return authResult.response;
   }
 
-  const { identity } = authResult;
-
-  // Defense-in-depth: if the identity is a known scheduler service account,
-  // log it. Accept all verified identities (user tokens for testing,
-  // scheduler OIDC for production).
-  if (!isAcceptedSchedulerIdentity(identity.email)) {
-    console.warn(
-      `[Scheduler] Request from non-scheduler identity: ${identity.email}`,
-    );
-  }
+  // Defense-in-depth: accept all verified identities (user tokens for
+  // testing, scheduler OIDC for production). Do NOT log identity emails
+  // to avoid PII in logs.
 
   const db = getDb();
   const results = {
@@ -106,8 +96,28 @@ export async function POST(request: Request) {
   };
 
   try {
-    // Get all users to evaluate their applications/interviews
-    const usersSnap = await db.collection("users").get();
+    // Paginate through all users to avoid unbounded queries.
+    // Firestore limits documents per request to ~1MB.
+    const PAGE_SIZE = 100;
+    let lastDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
+    let hasMore = true;
+
+    while (hasMore) {
+    let query = db.collection("users").orderBy("__name__").limit(PAGE_SIZE);
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
+    }
+    const usersSnap = await query.get();
+
+    if (usersSnap.empty) {
+      hasMore = false;
+      break;
+    }
+
+    lastDoc = usersSnap.docs[usersSnap.docs.length - 1];
+    if (usersSnap.docs.length < PAGE_SIZE) {
+      hasMore = false;
+    }
 
     for (const userDoc of usersSnap.docs) {
       const userUid = userDoc.id;
@@ -251,14 +261,24 @@ export async function POST(request: Request) {
           .where("status", "==", "scheduled")
           .get();
 
+        // Load application data for interview context (job title, company)
+        const appMap = new Map<string, FirestoreApplication>();
+        for (const appDoc of appsSnap.docs) {
+          const app = appDoc.data() as FirestoreApplication;
+          appMap.set(app.id, app);
+        }
+
         for (const intDoc of interviewsSnap.docs) {
           const interview = intDoc.data() as FirestoreInterview;
 
           if (interview.scheduledAt) {
+            const scheduledDate = new Date(interview.scheduledAt);
+            const nowDate = new Date();
+            const hoursUntil = (scheduledDate.getTime() - nowDate.getTime()) / (1000 * 60 * 60);
             const days = daysUntil(interview.scheduledAt);
 
+            // Interview is upcoming (within 7 days) — generate INTERVIEW_SCHEDULED reminder
             if (days >= 0 && days <= 7) {
-              // Interview is upcoming (within 7 days)
               const eventKey = deadlineEventKey(
                 "INTERVIEW_SCHEDULED",
                 interview.id,
@@ -269,6 +289,8 @@ export async function POST(request: Request) {
                 eventKey,
               );
               if (!alreadyProcessed) {
+                // Resolve application context for notification content
+                const app = interview.applicationId ? appMap.get(interview.applicationId) : undefined;
                 try {
                   await publishDomainEvent(
                     eventCtx,
@@ -278,6 +300,38 @@ export async function POST(request: Request) {
                       interviewId: interview.id,
                       applicationId: interview.applicationId,
                       scheduledAt: interview.scheduledAt,
+                      jobTitle: app?.jobTitle,
+                      company: app?.company,
+                    },
+                  );
+                  results.interviewUpcoming++;
+                } catch {
+                  results.errors++;
+                }
+              }
+            }
+
+            // Interview within 24 hours — generate INTERVIEW_REMINDER
+            if (hoursUntil > 0 && hoursUntil <= 24) {
+              const reminderDateKey = scheduledDate.toISOString().split("T")[0];
+              const reminderEventKey = `evt_INTERVIEW_REMINDER_${interview.id}_${reminderDateKey}`;
+              const alreadyProcessed = await isEventProcessed(
+                userUid,
+                reminderEventKey,
+              );
+              if (!alreadyProcessed) {
+                const app = interview.applicationId ? appMap.get(interview.applicationId) : undefined;
+                try {
+                  await publishDomainEvent(
+                    eventCtx,
+                    "INTERVIEW_REMINDER",
+                    { type: "interview", id: interview.id },
+                    {
+                      interviewId: interview.id,
+                      applicationId: interview.applicationId,
+                      scheduledAt: interview.scheduledAt,
+                      jobTitle: app?.jobTitle,
+                      company: app?.company,
                     },
                   );
                   results.interviewUpcoming++;
@@ -297,7 +351,8 @@ export async function POST(request: Request) {
         );
         results.errors++;
       }
-    }
+    } // end for userDoc
+    } // end while hasMore
 
     // Log with safe metadata only — no user data, no resume content
     console.log(
@@ -313,7 +368,6 @@ export async function POST(request: Request) {
       success: true,
       data: results,
       processedAt: now(),
-      verifiedIdentity: identity.email,
     });
   } catch (error) {
     console.error("[Scheduler] Processing error:", error);
