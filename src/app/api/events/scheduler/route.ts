@@ -29,7 +29,7 @@ import { getDb } from "@/lib/firestore/db";
 import { now } from "@/lib/firestore/db";
 import { publishDomainEvent, type EventContext } from "@/lib/events/publisher";
 import { isEventProcessed } from "@/lib/events/processor";
-import { verifySchedulerRequest } from "@/lib/events/auth";
+import { verifySchedulerRequest, isAcceptedSchedulerIdentity } from "@/lib/events/auth";
 import type {
   FirestoreApplication,
   FirestoreInterview,
@@ -81,9 +81,25 @@ export async function POST(request: Request) {
     return authResult.response;
   }
 
-  // Defense-in-depth: accept all verified identities (user tokens for
-  // testing, scheduler OIDC for production). Do NOT log identity emails
-  // to avoid PII in logs.
+  // Defense-in-depth: for scheduler OIDC tokens (not user tokens or dev bypass),
+  // verify the service account is the expected one. This prevents a compromised
+  // Google service account from triggering scheduler work.
+  // User tokens and dev bypass are still accepted for testing.
+  const identityEmail = authResult.identity.email;
+  if (
+    identityEmail &&
+    !identityEmail.startsWith("uid:") &&
+    !identityEmail.startsWith("dev-bypass") &&
+    !isAcceptedSchedulerIdentity(identityEmail)
+  ) {
+    console.warn(
+      "[Scheduler] Rejected unaccepted service account (not logged for security)",
+    );
+    return NextResponse.json(
+      { success: false, error: "Unauthorized: unaccepted service account" },
+      { status: 403 },
+    );
+  }
 
   const db = getDb();
   const results = {

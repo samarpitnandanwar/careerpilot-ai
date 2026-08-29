@@ -58,6 +58,16 @@ describe("isAcceptedSchedulerIdentity", () => {
   it("rejects user emails", () => {
     expect(isAcceptedSchedulerIdentity("user@gmail.com")).toBe(false);
   });
+
+  it("scheduler route imports isAcceptedSchedulerIdentity for defense-in-depth", () => {
+    // Verify the scheduler route actually uses the identity check
+    const schedulerCode = fs.readFileSync(
+      "src/app/api/events/scheduler/route.ts",
+      "utf-8",
+    );
+    expect(schedulerCode).toContain("isAcceptedSchedulerIdentity");
+    expect(schedulerCode).toContain("import { verifySchedulerRequest, isAcceptedSchedulerIdentity }");
+  });
 });
 
 // ---------------------------------------------------------------------------
