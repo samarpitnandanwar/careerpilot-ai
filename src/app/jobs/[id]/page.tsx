@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, CardHeader, Badge, ScoreRing } from "@/components/ui";
 import {
@@ -17,20 +17,262 @@ import {
   Sparkles,
   Loader2,
   RefreshCw,
+  Plus,
+  Briefcase,
+  Calendar,
 } from "lucide-react";
 import { scoreColor } from "@/lib/utils";
-import type { FirestoreJob, FirestoreJobAnalysis } from "@/types";
+import type {
+  FirestoreJob,
+  FirestoreJobAnalysis,
+  FirestoreApplication,
+  ApplicationStatus,
+} from "@/types";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+async function getToken(): Promise<string | null> {
+  try {
+    const { getAuth } = await import("firebase/auth");
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return null;
+    return user.getIdToken();
+  } catch {
+    return null;
+  }
+}
+
+function formatDeadline(deadline: string | null): { text: string; color: string; expired: boolean } {
+  if (!deadline) return { text: "Not specified", color: "text-slate-400", expired: false };
+  const now = new Date();
+  const dl = new Date(deadline);
+  const diffMs = dl.getTime() - now.getTime();
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (days < 0) return { text: "Expired", color: "text-red-500 font-semibold", expired: true };
+  if (days === 0) return { text: "Today", color: "text-red-600 font-semibold", expired: false };
+  if (days === 1) return { text: "Tomorrow", color: "text-red-500 font-medium", expired: false };
+  if (days <= 7) return { text: `${days} days left`, color: "text-amber-600", expired: false };
+  if (days <= 30) return { text: `${days} days left`, color: "text-slate-600", expired: false };
+  return { text: `${days} days left`, color: "text-slate-400", expired: false };
+}
+
+const STATUS_LABELS: Record<ApplicationStatus, string> = {
+  saved: "Tracked",
+  applied: "Applied",
+  screening: "Screening",
+  assessment: "Assessment",
+  interview: "Interview",
+  offer: "Offer",
+  accepted: "Accepted",
+  rejected: "Rejected",
+  withdrawn: "Withdrawn",
+};
+
+const STATUS_COLORS: Record<ApplicationStatus, string> = {
+  saved: "bg-slate-100 text-slate-700",
+  applied: "bg-blue-100 text-blue-700",
+  screening: "bg-indigo-100 text-indigo-700",
+  assessment: "bg-purple-100 text-purple-700",
+  interview: "bg-amber-100 text-amber-700",
+  offer: "bg-green-100 text-green-700",
+  accepted: "bg-emerald-100 text-emerald-700",
+  rejected: "bg-red-100 text-red-700",
+  withdrawn: "bg-slate-100 text-slate-500",
+};
+
+// ---------------------------------------------------------------------------
+// Apply Modal
+// ---------------------------------------------------------------------------
+
+function ApplyModal({
+  open,
+  onClose,
+  onCreated,
+  job,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (app: FirestoreApplication) => void;
+  job: FirestoreJob;
+}) {
+  const [source, setSource] = useState("manual");
+  const [applicationUrl, setApplicationUrl] = useState("");
+  const [deadline, setDeadline] = useState(job.deadline ?? "");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    try {
+      const token = await getToken();
+      if (!token) {
+        setError("Not authenticated.");
+        return;
+      }
+
+      const res = await fetch(`/api/jobs/${job.id}/apply`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          source: source || undefined,
+          applicationUrl: applicationUrl.trim() || undefined,
+          deadline: deadline || undefined,
+          notes: notes.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!data.success) {
+        setError(data.error || "Failed to create application.");
+        return;
+      }
+
+      onCreated(data.data);
+      onClose();
+    } catch {
+      setError("Failed to create application. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="mx-4 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-slate-200 p-6">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Track Application</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              {job.title} at {job.company}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 p-6">
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Source</label>
+            <select
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+            >
+              <option value="manual">Manual Entry</option>
+              <option value="linkedin">LinkedIn</option>
+              <option value="indeed">Indeed</option>
+              <option value="company_site">Company Website</option>
+              <option value="referral">Referral</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Application URL</label>
+            <input
+              type="url"
+              value={applicationUrl}
+              onChange={(e) => setApplicationUrl(e.target.value)}
+              placeholder="https://..."
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Deadline</label>
+            <input
+              type="date"
+              value={deadline}
+              onChange={(e) => setDeadline(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Defaults to job deadline if not specified.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700">Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes..."
+              rows={3}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus size={16} />
+                  Track Application
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
 
 export default function JobDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const jobId = params.id as string;
 
   const [job, setJob] = useState<FirestoreJob | null>(null);
   const [analysis, setAnalysis] = useState<FirestoreJobAnalysis | null>(null);
+  const [application, setApplication] = useState<FirestoreApplication | null>(null);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [creatingApp, setCreatingApp] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,9 +286,10 @@ export default function JobDetailPage() {
           return;
         }
 
-        const res = await fetch(`/api/jobs/${jobId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const headers = { Authorization: `Bearer ${token}` };
+
+        // Load job
+        const res = await fetch(`/api/jobs/${jobId}`, { headers });
         const data = await res.json();
         if (!cancelled) {
           if (!data.success) {
@@ -56,12 +299,21 @@ export default function JobDetailPage() {
           setJob(data.data);
         }
 
-        const analysisRes = await fetch(`/api/jobs/${jobId}/match`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        // Load match analysis (non-blocking)
+        const analysisRes = await fetch(`/api/jobs/${jobId}/match`, { headers });
         const analysisData = await analysisRes.json();
         if (!cancelled && analysisData.success && analysisData.data?.analysis) {
           setAnalysis(analysisData.data.analysis);
+        }
+
+        // Check for existing application for this job
+        const appsRes = await fetch("/api/applications", { headers });
+        const appsData = await appsRes.json();
+        if (!cancelled && appsData.success && appsData.data) {
+          const existing = appsData.data.find(
+            (a: FirestoreApplication) => a.jobId === jobId,
+          );
+          if (existing) setApplication(existing);
         }
       } catch {
         if (!cancelled) setError("Failed to load job details");
@@ -100,6 +352,39 @@ export default function JobDetailPage() {
     }
   };
 
+  const handleApply = async () => {
+    setCreatingApp(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/jobs/${jobId}/apply`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+
+      const data = await res.json();
+      if (data.success && data.data) {
+        setApplication(data.data);
+        router.push(`/applications/${data.data.id}`);
+      }
+    } catch {
+      // ignore — button will return to normal
+    } finally {
+      setCreatingApp(false);
+    }
+  };
+
+  const handleApplicationCreated = (app: FirestoreApplication) => {
+    setApplication(app);
+    router.push(`/applications/${app.id}`);
+  };
+
+  // ------- Loading state -------
   if (loading) {
     return (
       <ProtectedLayout>
@@ -110,6 +395,7 @@ export default function JobDetailPage() {
     );
   }
 
+  // ------- Error / not found state -------
   if (error || !job) {
     return (
       <ProtectedLayout>
@@ -128,6 +414,8 @@ export default function JobDetailPage() {
     );
   }
 
+  const deadline = formatDeadline(job.deadline);
+
   return (
     <ProtectedLayout>
       <div className="space-y-6">
@@ -139,10 +427,10 @@ export default function JobDetailPage() {
           <ArrowLeft size={16} /> Back to Jobs
         </Link>
 
-        {/* Job header */}
+        {/* Job header with application action */}
         <Card>
           <div className="flex items-start justify-between">
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="text-2xl font-bold text-slate-900">{job.title}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-slate-500">
                 <span className="flex items-center gap-1">
@@ -158,6 +446,11 @@ export default function JobDetailPage() {
                     <DollarSign size={14} /> {job.salary}
                   </span>
                 )}
+                {job.deadline && (
+                  <span className={`flex items-center gap-1 ${deadline.color}`}>
+                    <Calendar size={14} /> {deadline.text}
+                  </span>
+                )}
                 {job.parsedData?.seniorityLevel && (
                   <Badge>{job.parsedData.seniorityLevel}</Badge>
                 )}
@@ -166,7 +459,9 @@ export default function JobDetailPage() {
                 )}
               </div>
             </div>
-            <div className="flex gap-2">
+
+            {/* Application action area */}
+            <div className="ml-4 flex-shrink-0 flex flex-col items-end gap-2">
               {job.url && (
                 <a
                   href={job.url}
@@ -177,9 +472,70 @@ export default function JobDetailPage() {
                   <ExternalLink size={14} /> Original
                 </a>
               )}
+
+              {application ? (
+                /* Already has an application — show status + link */
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400 mb-0.5">Application</p>
+                    <Badge className={STATUS_COLORS[application.status]}>
+                      {STATUS_LABELS[application.status]}
+                    </Badge>
+                  </div>
+                  <Link
+                    href={`/applications/${application.id}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50"
+                  >
+                    <Briefcase size={14} /> View Application
+                  </Link>
+                </div>
+              ) : (
+                /* No application — show apply button */
+                <button
+                  onClick={handleApply}
+                  disabled={creatingApp}
+                  className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {creatingApp ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Track Application
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
+
+          {/* Deadline warning for expired jobs */}
+          {deadline.expired && !application && (
+            <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700 flex items-center gap-2">
+              <AlertTriangle size={16} />
+              This job&apos;s deadline has passed. You can still track it, but the posting may be closed.
+            </div>
+          )}
         </Card>
+
+        {/* Secondary action: detailed apply form (if no application) */}
+        {!application && (
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowApplyModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              <Plus size={14} />
+              Detailed Setup
+            </button>
+            <p className="self-center text-xs text-slate-400">
+              Set source, URL, deadline, and notes
+            </p>
+          </div>
+        )}
 
         {/* Analyze / Re-analyze button */}
         <Card>
@@ -322,7 +678,6 @@ export default function JobDetailPage() {
 
             {/* Skills & gaps */}
             <div className="grid gap-6 lg:grid-cols-2">
-              {/* Matched skills */}
               <Card>
                 <CardHeader title="Matched Skills" subtitle="Skills you have that match" />
                 <div className="flex flex-wrap gap-2">
@@ -349,7 +704,6 @@ export default function JobDetailPage() {
                 </div>
               </Card>
 
-              {/* Missing skills */}
               <Card>
                 <CardHeader title="Missing Skills" subtitle="Skills to develop" />
                 <div className="flex flex-wrap gap-2">
@@ -367,13 +721,9 @@ export default function JobDetailPage() {
                 </div>
               </Card>
 
-              {/* Strengths */}
               {analysis.strengths && analysis.strengths.length > 0 && (
                 <Card>
-                  <CardHeader
-                    title="Strengths"
-                    subtitle="Why you are a good match"
-                  />
+                  <CardHeader title="Strengths" subtitle="Why you are a good match" />
                   <ul className="space-y-2">
                     {analysis.strengths.map((s, i) => (
                       <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
@@ -385,7 +735,6 @@ export default function JobDetailPage() {
                 </Card>
               )}
 
-              {/* Gaps */}
               {analysis.gaps && analysis.gaps.length > 0 && (
                 <Card>
                   <CardHeader title="Potential Gaps" subtitle="Areas for development" />
@@ -400,7 +749,6 @@ export default function JobDetailPage() {
                 </Card>
               )}
 
-              {/* Experience gaps */}
               {analysis.experienceGaps && analysis.experienceGaps.length > 0 && (
                 <Card>
                   <CardHeader title="Experience Gaps" />
@@ -438,7 +786,6 @@ export default function JobDetailPage() {
                 </Card>
               )}
 
-              {/* Key responsibilities */}
               {job.parsedData?.responsibilities && job.parsedData.responsibilities.length > 0 && (
                 <Card>
                   <CardHeader title="Key Responsibilities" />
@@ -454,7 +801,6 @@ export default function JobDetailPage() {
               )}
             </div>
 
-            {/* Skill evidence detail */}
             {analysis.skillEvidence && analysis.skillEvidence.length > 0 && (
               <Card>
                 <CardHeader title="Skill Evidence Detail" subtitle="Detailed skill-by-skill analysis" />
@@ -507,22 +853,14 @@ export default function JobDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* Apply modal */}
+      <ApplyModal
+        open={showApplyModal}
+        onClose={() => setShowApplyModal(false)}
+        onCreated={handleApplicationCreated}
+        job={job}
+      />
     </ProtectedLayout>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Helper — get Firebase ID token from the current user
-// ---------------------------------------------------------------------------
-
-async function getToken(): Promise<string | null> {
-  try {
-    const { getAuth } = await import("firebase/auth");
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return null;
-    return user.getIdToken();
-  } catch {
-    return null;
-  }
 }

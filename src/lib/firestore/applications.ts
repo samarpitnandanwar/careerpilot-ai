@@ -178,6 +178,20 @@ export async function getApplication(
   });
 }
 
+export async function getApplicationByJobId(
+  uid: string,
+  jobId: string,
+): Promise<FirestoreApplication | null> {
+  return handleFirestoreError(async () => {
+    const db = getDb();
+    const snap = await applicationsCol(db, uid)
+      .where("jobId", "==", jobId)
+      .limit(1)
+      .get();
+    return snap.empty ? null : (snap.docs[0].data() as FirestoreApplication);
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Update application (non-status fields only)
 // ---------------------------------------------------------------------------
