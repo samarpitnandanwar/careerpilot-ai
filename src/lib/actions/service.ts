@@ -78,22 +78,37 @@ export async function getActions(
   } = {},
 ): Promise<FirestoreAction[]> {
   return handleFirestoreError(async () => {
-    let query: FirebaseFirestore.Query = actionsCol(uid);
-
-    if (options.status) {
-      query = query.where("status", "==", options.status);
-    }
-
-    // Order by priority (custom order), then by dueAt, then by createdAt
     const sortField = options.orderBy ?? "createdAt";
-    query = query.orderBy(sortField, sortField === "priority" ? "asc" : "desc");
+    const sortDesc = sortField !== "priority";
+    let actions: FirestoreAction[] = [];
 
-    if (options.limit) {
-      query = query.limit(options.limit);
+    // Try the compound query with orderBy (requires composite index)
+    try {
+      let query: FirebaseFirestore.Query = actionsCol(uid);
+      if (options.status) {
+        query = query.where("status", "==", options.status);
+      }
+      query = query.orderBy(sortField, sortDesc ? "desc" : "asc");
+      if (options.limit) {
+        query = query.limit(options.limit);
+      }
+      const snap = await query.get();
+      actions = snap.docs.map((doc) => doc.data() as FirestoreAction);
+    } catch (queryError) {
+      // Compound index may not be ready yet — fall back to simpler query
+      console.error("[Actions] Compound query failed, falling back:", queryError);
+      let fallbackQuery: FirebaseFirestore.Query = actionsCol(uid);
+      if (options.status) {
+        fallbackQuery = fallbackQuery.where("status", "==", options.status);
+      }
+      // Use __name__ ordering which always works
+      fallbackQuery = fallbackQuery.orderBy("__name__", "desc");
+      if (options.limit) {
+        fallbackQuery = fallbackQuery.limit(options.limit);
+      }
+      const snap = await fallbackQuery.get();
+      actions = snap.docs.map((doc) => doc.data() as FirestoreAction);
     }
-
-    const snap = await query.get();
-    const actions = snap.docs.map((doc) => doc.data() as FirestoreAction);
 
     // If ordering by priority, sort client-side with custom priority order
     if (sortField === "priority") {
@@ -209,10 +224,32 @@ export async function expireActions(uid: string): Promise<number> {
     const db = getDb();
     const nowStr = now();
 
-    const snap = await actionsCol(uid)
-      .where("status", "==", "OPEN")
-      .where("expiresAt", "<=", nowStr)
-      .get();
+    let snap: FirebaseFirestore.QuerySnapshot;
+    try {
+      snap = await actionsCol(uid)
+        .where("status", "==", "OPEN")
+        .where("expiresAt", "<=", nowStr)
+        .get();
+    } catch (queryError) {
+      // Compound index may not be ready — fall back to status-only query
+      console.error("[Actions] Expire query failed, falling back:", queryError);
+      snap = await actionsCol(uid)
+        .where("status", "==", "OPEN")
+        .get();
+      // Client-side filter by expiresAt
+      const filtered = snap.docs.filter((doc) => {
+        const data = doc.data();
+        return data.expiresAt && data.expiresAt <= nowStr;
+      });
+      if (filtered.length === 0) return 0;
+
+      const batch = db.batch();
+      for (const doc of filtered) {
+        batch.update(doc.ref, { status: "EXPIRED" });
+      }
+      await batch.commit();
+      return filtered.length;
+    }
 
     if (snap.empty) return 0;
 

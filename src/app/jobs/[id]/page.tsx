@@ -29,21 +29,11 @@ import type {
   ApplicationStatus,
 } from "@/types";
 
+import { getIdToken } from "@/lib/firebase/get-token";
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-async function getToken(): Promise<string | null> {
-  try {
-    const { getAuth } = await import("firebase/auth");
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return null;
-    return user.getIdToken();
-  } catch {
-    return null;
-  }
-}
 
 function formatDeadline(deadline: string | null): { text: string; color: string; expired: boolean } {
   if (!deadline) return { text: "Not specified", color: "text-slate-400", expired: false };
@@ -111,7 +101,7 @@ function ApplyModal({
     setError(null);
 
     try {
-      const token = await getToken();
+      const token = await getIdToken();
       if (!token) {
         setError("Not authenticated.");
         return;
@@ -280,7 +270,7 @@ export default function JobDetailPage() {
       try {
         setLoading(true);
         setError(null);
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) {
           if (!cancelled) setError("Not authenticated");
           return;
@@ -329,7 +319,7 @@ export default function JobDetailPage() {
     try {
       setAnalyzing(true);
       setAnalysisError(null);
-      const token = await getToken();
+      const token = await getIdToken();
       if (!token) return;
 
       const res = await fetch(`/api/jobs/${jobId}/match`, {
@@ -355,7 +345,7 @@ export default function JobDetailPage() {
   const handleApply = async () => {
     setCreatingApp(true);
     try {
-      const token = await getToken();
+      const token = await getIdToken();
       if (!token) return;
 
       const res = await fetch(`/api/jobs/${jobId}/apply`, {

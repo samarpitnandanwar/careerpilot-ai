@@ -1,12 +1,119 @@
-import type { Metadata } from "next";
-import { ProtectedLayout } from "@/components/auth/protected-layout";
-import { Card, CardHeader, Input, Button } from "@/components/ui";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Settings",
-};
+import { useState, useEffect, type FormEvent } from "react";
+import { getAuth } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { ProtectedLayout } from "@/components/auth/protected-layout";
+import { Card, CardHeader } from "@/components/ui";
+import { Loader2 } from "lucide-react";
+import { getIdToken } from "@/lib/firebase/get-token";
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const auth = getAuth();
+        const user = auth.currentUser;
+        if (!user || cancelled) return;
+
+        if (user.email) setEmail(user.email);
+
+        // Split displayName into first/last
+        if (user.displayName) {
+          const parts = user.displayName.trim().split(/\s+/);
+          if (!cancelled) {
+            setFirstName(parts[0] || "");
+            setLastName(parts.slice(1).join(" ") || "");
+          }
+        }
+
+        // Try to get profile data for richer info
+        const token = await getIdToken();
+        if (!token || cancelled) return;
+
+        const res = await fetch("/api/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok && !cancelled) {
+          const json = await res.json();
+          if (json.success && json.data?.fullName) {
+            const nameParts = json.data.fullName.trim().split(/\s+/);
+            setFirstName(nameParts[0] || "");
+            setLastName(nameParts.slice(1).join(" ") || "");
+          }
+        }
+      } catch {
+        // Silently fail
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setSaved(false);
+
+    try {
+      const auth = getAuth();
+      const user = auth.currentUser;
+      if (user) {
+        // Update Firebase display name
+        const { updateProfile } = await import("firebase/auth");
+        await updateProfile(user, {
+          displayName: `${firstName} ${lastName}`.trim() || undefined,
+        });
+      }
+
+      // Update server profile
+      const token = await getIdToken();
+      if (token) {
+        const fullName = `${firstName} ${lastName}`.trim();
+        if (fullName) {
+          await fetch("/api/profile", {
+            method: "PUT",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ fullName }),
+          });
+        }
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      // Silently fail
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      const { signOut } = await import("@/lib/firebase/auth");
+      await signOut();
+      router.push("/login");
+    } catch {
+      setSigningOut(false);
+    }
+  }
+
   return (
     <ProtectedLayout>
       <div className="space-y-6">
@@ -17,125 +124,109 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        {/* Account */}
-        <Card>
-          <CardHeader title="Account" subtitle="Your basic account information" />
-          <form className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Input label="First name" defaultValue="Jane" />
-              <Input label="Last name" defaultValue="Smith" />
-            </div>
-            <Input label="Email" type="email" defaultValue="jane@example.com" disabled />
-            <div className="flex justify-end">
-              <Button>Save Changes</Button>
-            </div>
-          </form>
-        </Card>
-
-        {/* Notifications */}
-        <Card>
-          <CardHeader
-            title="Notifications"
-            subtitle="Control what notifications you receive"
-          />
-          <div className="space-y-4">
-            {[
-              {
-                label: "Deadline reminders",
-                description: "Get notified before application deadlines",
-                defaultChecked: true,
-              },
-              {
-                label: "Interview reminders",
-                description: "Reminders before scheduled interviews",
-                defaultChecked: true,
-              },
-              {
-                label: "New job matches",
-                description: "Notifications when new high-match jobs are found",
-                defaultChecked: false,
-              },
-              {
-                label: "Weekly summary",
-                description: "Weekly analytics and progress report",
-                defaultChecked: true,
-              },
-            ].map((pref) => (
-              <label
-                key={pref.label}
-                className="flex items-center justify-between rounded-lg border border-slate-100 p-4"
-              >
-                <div>
-                  <p className="text-sm font-medium text-slate-700">{pref.label}</p>
-                  <p className="text-xs text-slate-500">{pref.description}</p>
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 size={24} className="animate-spin text-blue-600" />
+          </div>
+        ) : (
+          <>
+            {/* Account */}
+            <Card>
+              <CardHeader title="Account" subtitle="Your basic account information" />
+              <form className="space-y-4" onSubmit={handleSave}>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="settings-first-name" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      First name
+                    </label>
+                    <input
+                      id="settings-first-name"
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="settings-last-name" className="mb-1.5 block text-sm font-medium text-slate-700">
+                      Last name
+                    </label>
+                    <input
+                      id="settings-last-name"
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
                 </div>
-                <input
-                  type="checkbox"
-                  defaultChecked={pref.defaultChecked}
-                  className="h-4 w-4 rounded border-slate-300"
-                />
-              </label>
-            ))}
-          </div>
-        </Card>
+                <div>
+                  <label htmlFor="settings-email" className="mb-1.5 block text-sm font-medium text-slate-700">
+                    Email
+                  </label>
+                  <input
+                    id="settings-email"
+                    type="email"
+                    value={email}
+                    disabled
+                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  {saved && (
+                    <span className="text-sm text-green-600">Saved!</span>
+                  )}
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:pointer-events-none disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            </Card>
 
-        {/* AI Preferences */}
-        <Card>
-          <CardHeader
-            title="AI Preferences"
-            subtitle="Configure how AI analyzes your applications"
-          />
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                Minimum match score to suggest
-              </label>
-              <input
-                type="range"
-                min={30}
-                max={90}
-                defaultValue={60}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-slate-400">
-                <span>30%</span>
-                <span>90%</span>
+            {/* Sign Out */}
+            <Card>
+              <CardHeader title="Session" subtitle="Manage your sign-in session" />
+              <div className="flex items-center justify-between rounded-lg border border-slate-100 p-4">
+                <div>
+                  <p className="text-sm font-medium text-slate-700">Sign out</p>
+                  <p className="text-xs text-slate-500">
+                    End your current session and return to the login page
+                  </p>
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:pointer-events-none disabled:opacity-50"
+                >
+                  {signingOut ? "Signing out..." : "Sign Out"}
+                </button>
               </div>
-            </div>
-            <label className="flex items-center justify-between rounded-lg border border-slate-100 p-4">
-              <div>
-                <p className="text-sm font-medium text-slate-700">Auto-generate interview prep</p>
-                <p className="text-xs text-slate-500">
-                  Automatically create interview questions when you reach the interview stage
-                </p>
-              </div>
-              <input
-                type="checkbox"
-                defaultChecked
-                className="h-4 w-4 rounded border-slate-300"
-              />
-            </label>
-          </div>
-        </Card>
+            </Card>
 
-        {/* Danger zone */}
-        <Card className="border-red-200">
-          <CardHeader
-            title="Danger Zone"
-            subtitle="Irreversible actions"
-          />
-          <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-4">
-            <div>
-              <p className="text-sm font-medium text-red-700">Delete account</p>
-              <p className="text-xs text-red-500">
-                Permanently delete your account and all data
-              </p>
-            </div>
-            <button className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
-              Delete Account
-            </button>
-          </div>
-        </Card>
+            {/* Danger zone */}
+            <Card className="border-red-200">
+              <CardHeader
+                title="Danger Zone"
+                subtitle="Irreversible actions"
+              />
+              <div className="flex items-center justify-between rounded-lg border border-red-200 bg-red-50 p-4">
+                <div>
+                  <p className="text-sm font-medium text-red-700">Delete account</p>
+                  <p className="text-xs text-red-500">
+                    Permanently delete your account and all data
+                  </p>
+                </div>
+                <button className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+                  Delete Account
+                </button>
+              </div>
+            </Card>
+          </>
+        )}
       </div>
     </ProtectedLayout>
   );

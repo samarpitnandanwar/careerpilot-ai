@@ -42,7 +42,7 @@ const EducationSchema = z.object({
   institution: z.string().min(1).max(200),
   degree: z.string().max(200).default(""),
   field: z.string().max(200).default(""),
-  startDate: z.string().max(50).default(""),
+  startDate: z.string().max(50).nullable().default(null),
   endDate: z.string().max(50).nullable().default(null),
   graduationDate: z.string().max(50).nullable().default(null),
   gpa: z.number().nullable().default(null),

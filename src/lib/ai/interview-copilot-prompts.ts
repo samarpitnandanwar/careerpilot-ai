@@ -66,7 +66,7 @@ Return ONLY a JSON object matching this exact structure:
     {
       "id": "q1",
       "question": "Specific question grounded in resume/job data",
-      "category": "technical|behavioral|experience|project|system_design|situational|company|role_specific|hr|leadership",
+      "category": "technical",
       "difficulty": "easy|medium|hard",
       "whyLikely": "Why this question is likely to be asked for this specific role",
       "whatItEvaluates": "What competency or skill the interviewer is evaluating",

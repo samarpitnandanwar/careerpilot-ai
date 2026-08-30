@@ -6,7 +6,7 @@ import { VertexAI, type GenerativeModel } from "@google-cloud/vertexai";
 
 const PROJECT_ID = process.env.NEXT_PUBLIC_GCP_PROJECT_ID ?? "careerpilot-ai-506813";
 const LOCATION = process.env.GEMINI_LOCATION ?? "us-central1";
-const MODEL_NAME = process.env.GEMINI_MODEL ?? "gemini-2.0-flash-001";
+const MODEL_NAME = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
 
 let _vertexAI: VertexAI | null = null;
 let _model: GenerativeModel | null = null;
@@ -41,11 +41,18 @@ export async function generateContent(prompt: string): Promise<string> {
   const result = await model.generateContent(prompt);
   const response = result.response;
 
-  if (!response?.candidates?.[0]?.content?.parts?.[0]?.text) {
+  const parts = response?.candidates?.[0]?.content?.parts;
+  if (!parts || parts.length === 0) {
     throw new GeminiError("No response from Gemini model", "NO_RESPONSE");
   }
 
-  return response.candidates[0].content.parts[0].text;
+  // Thinking models (e.g. gemini-3.5-flash) may return multiple parts.
+  // Use the last text part — it is the final answer.
+  const textParts = parts.filter((p) => p.text);
+  if (textParts.length === 0) {
+    throw new GeminiError("No response from Gemini model", "NO_RESPONSE");
+  }
+  return textParts[textParts.length - 1].text!;
 }
 
 export class GeminiError extends Error {

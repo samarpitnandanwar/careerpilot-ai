@@ -157,6 +157,16 @@ export async function generateInterviewPrep(
     id: q.id || `q-${idx + 1}`,
   }));
 
+  // Handle alternative field names from Gemini (may use different names)
+  const strengthsToEmphasize = output.strengthsToEmphasize ??
+    (output as unknown as Record<string, unknown>).strengthsToHighlight as string[] ?? [];
+  const gapsToPrepare = output.gapsToPrepare ??
+    (output as unknown as Record<string, unknown>).areasToPrepare as string[] ?? [];
+  const topicsToReview = output.topicsToReview ??
+    (output as unknown as Record<string, unknown>).focusAreas as string[] ?? [];
+  const finalTips = output.finalTips ??
+    (output as unknown as Record<string, unknown>).overallTips as string[] ?? [];
+
   return {
     applicationId: input.applicationId,
     jobId: input.job.id,
@@ -166,11 +176,11 @@ export async function generateInterviewPrep(
     promptVersion: INTERVIEW_COPILOT_PROMPT_VERSION,
     overview: output.overview,
     questions,
-    strengthsToEmphasize: output.strengthsToEmphasize,
-    gapsToPrepare: output.gapsToPrepare,
-    topicsToReview: output.topicsToReview,
-    finalTips: output.finalTips,
-    confidence: output.confidence,
+    strengthsToEmphasize: strengthsToEmphasize as string[],
+    gapsToPrepare: gapsToPrepare as string[],
+    topicsToReview: topicsToReview as string[],
+    finalTips: finalTips as string[],
+    confidence: output.confidence ?? 0,
   };
 }
 

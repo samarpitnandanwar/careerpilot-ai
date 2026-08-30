@@ -103,4 +103,4 @@ RESUME TEXT:
 `;
 
 export const PROMPT_VERSION = "v1";
-export const MODEL_ID = "gemini-2.0-flash-001";
+export const MODEL_ID = "gemini-3.5-flash";

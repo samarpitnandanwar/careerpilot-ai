@@ -9,6 +9,30 @@ import {
   isAuthConfigured,
 } from "@/lib/firebase/auth";
 
+async function checkOnboardingNeeded(): Promise<boolean> {
+  try {
+    const { getAuth } = await import("firebase/auth");
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (!user) return true;
+    const token = await user.getIdToken();
+    const res = await fetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return false;
+    // Check if user has a profile — if not, redirect to onboarding
+    const profileRes = await fetch("/api/profile", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!profileRes.ok) return true;
+    const json = await profileRes.json();
+    // If no profile or empty profile, needs onboarding
+    return !json.success || !json.data || !json.data.headline;
+  } catch {
+    return false;
+  }
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -34,7 +58,9 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // Check if user needs onboarding
+    const needsOnboarding = await checkOnboardingNeeded();
+    router.push(needsOnboarding ? "/onboarding" : "/dashboard");
   }
 
   // ------------------------------------------------------------------
@@ -53,7 +79,9 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // Check if user needs onboarding
+    const needsOnboarding = await checkOnboardingNeeded();
+    router.push(needsOnboarding ? "/onboarding" : "/dashboard");
   }
 
   // ------------------------------------------------------------------

@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Node
+node_modules
+.next
+.freebuff
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.yml
+.dockerignore
+
+# Documentation
+*.md
+LICENSE
+
+# Test artifacts
+coverage

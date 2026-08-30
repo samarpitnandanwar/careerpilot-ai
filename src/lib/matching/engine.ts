@@ -19,7 +19,7 @@ import { matchSkills, calculateScores, deriveRecommendation, type SkillMatchResu
 // ---------------------------------------------------------------------------
 
 const MATCH_ENGINE_VERSION = "v1";
-const MODEL_ID = process.env.GEMINI_MODEL ?? "gemini-2.0-flash-001";
+const MODEL_ID = process.env.GEMINI_MODEL ?? "gemini-3.5-flash";
 
 // ---------------------------------------------------------------------------
 // Input types

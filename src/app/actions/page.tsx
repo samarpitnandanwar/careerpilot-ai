@@ -18,6 +18,7 @@ import {
 import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, Badge, EmptyState } from "@/components/ui";
 import type { FirestoreAction, ActionType, ActionPriority } from "@/lib/actions";
+import { getIdToken } from "@/lib/firebase/get-token";
 
 const ICON_MAP: Record<string, React.ReactNode> = {
   Mic: <Mic size={16} />,
@@ -67,7 +68,7 @@ export default function ActionsPage() {
     async function load() {
       try {
         setLoading(true);
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) {
           if (!cancelled) setError("Not authenticated");
           return;
@@ -99,7 +100,7 @@ export default function ActionsPage() {
   async function handleComplete(actionId: string) {
     setProcessingId(actionId);
     try {
-      const token = await getToken();
+      const token = await getIdToken();
       if (!token) return;
       await fetch(`/api/actions/${actionId}/complete`, {
         method: "POST",
@@ -120,7 +121,7 @@ export default function ActionsPage() {
   async function handleDismiss(actionId: string) {
     setProcessingId(actionId);
     try {
-      const token = await getToken();
+      const token = await getIdToken();
       if (!token) return;
       await fetch(`/api/actions/${actionId}/dismiss`, {
         method: "POST",
@@ -295,14 +296,4 @@ export default function ActionsPage() {
   );
 }
 
-async function getToken(): Promise<string | null> {
-  try {
-    const { getAuth } = await import("firebase/auth");
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return null;
-    return user.getIdToken();
-  } catch {
-    return null;
-  }
-}
+

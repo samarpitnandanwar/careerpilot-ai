@@ -99,13 +99,22 @@ export async function POST(request: Request) {
       return jsonInternal("Failed to save resume record");
     }
 
-    // --- Kick off processing (synchronous for now) ---
-    // Processing runs after the response to avoid timeout issues.
-    // For now, we trigger it and let the user poll status.
-    processResume(user.uid, resumeId, uploadedPath, mime || "application/octet-stream")
-      .catch((error) => {
-        console.error("[Upload] Processing error:", error);
-      });
+    // --- Process resume (extract text + Gemini analysis) ---
+    // Run synchronously so the Cloud Run instance stays alive.
+    const processResult = await processResume(
+      user.uid,
+      resume.id,
+      uploadedPath,
+      mime || "application/octet-stream",
+    ).catch((error) => {
+      console.error("[Upload] Processing error:", error);
+      return null;
+    });
+
+    // Return the resume with its current status (may be 'ready' or 'failed')
+    if (processResult && processResult.success) {
+      return jsonCreated({ ...resume, status: "ready" });
+    }
 
     return jsonCreated(resume);
   } catch (error) {

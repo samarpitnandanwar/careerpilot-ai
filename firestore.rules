@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================================================
+    // Default: deny all
+    // ============================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ============================================================================
+    // User-scoped data: users/{uid}/...
+    // All application data is nested under a user document.
+    // Authenticated users can ONLY access their own subcollections.
+    // Server-side firebase-admin SDK bypasses these rules — these protect
+    // against direct client-side Firestore access.
+    // ============================================================================
+    match /users/{uid} {
+      // User profile (single document)
+      match /profile/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Resumes
+      match /resumes/{resumeId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Jobs
+      match /jobs/{jobId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        // Match analyses per job
+        match /analyses/{analysisId} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+
+        // Priority scores per job
+        match /priority/{priorityId} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+
+      // Applications
+      match /applications/{applicationId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+
+        // Activity timeline per application
+        match /activities/{activityId} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+
+        // Match analyses per application
+        match /analyses/{analysisId} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+
+        // Interview preparation per application
+        match /interviewPrep/{prepId} {
+          allow read, write: if request.auth != null && request.auth.uid == uid;
+        }
+      }
+
+      // Interviews
+      match /interviews/{interviewId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Notifications
+      match /notifications/{notificationId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Actions (Action Center)
+      match /actions/{actionId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Activity (global user activity feed)
+      match /activity/{activityId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // System markers (reconciliation TTL, notification preferences, etc.)
+      match /system/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+
+      // Event processing records (idempotency)
+      match /eventProcessing/{eventId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+  }
+}

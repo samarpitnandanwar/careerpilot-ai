@@ -1,0 +1,14 @@
+node_modules
+.next
+.git
+.freebuff
+*.md
+LICENSE
+.vscode
+.idea
+coverage
+.env*
+!.env.example
+.dockerignore
+.gcloudignore
+cloudbuild.yaml

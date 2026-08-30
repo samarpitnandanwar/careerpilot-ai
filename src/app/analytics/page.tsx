@@ -66,7 +66,7 @@ export default function AnalyticsPage() {
     async function load() {
       try {
         setLoading(true);
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) {
           if (!cancelled) setError("Not authenticated");
           return;
@@ -397,14 +397,4 @@ export default function AnalyticsPage() {
   );
 }
 
-async function getToken(): Promise<string | null> {
-  try {
-    const { getAuth } = await import("firebase/auth");
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return null;
-    return user.getIdToken();
-  } catch {
-    return null;
-  }
-}
+import { getIdToken } from "@/lib/firebase/get-token";

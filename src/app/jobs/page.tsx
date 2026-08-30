@@ -6,22 +6,7 @@ import { Plus, MapPin, Building2, Clock, Search, X, Loader2 } from "lucide-react
 import { ProtectedLayout } from "@/components/auth/protected-layout";
 import { Card, Badge } from "@/components/ui";
 import type { FirestoreJob } from "@/types";
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-async function getToken(): Promise<string | null> {
-  try {
-    const { getAuth } = await import("firebase/auth");
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return null;
-    return user.getIdToken();
-  } catch {
-    return null;
-  }
-}
+import { getIdToken } from "@/lib/firebase/get-token";
 
 function formatDeadline(deadline: string | null): { text: string; color: string } | null {
   if (!deadline) return null;
@@ -86,7 +71,7 @@ function AddJobModal({
     setError(null);
 
     try {
-      const token = await getToken();
+      const token = await getIdToken();
       if (!token) {
         setError("Not authenticated.");
         return;
@@ -314,7 +299,7 @@ export default function JobsPage() {
     async function load() {
       try {
         setLoading(true);
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) {
           if (!cancelled) setError("Not authenticated");
           return;

@@ -682,7 +682,7 @@ export type InterviewQuestionDifficulty = "easy" | "medium" | "hard";
 export interface InterviewPrepQuestion {
   id: string;
   question: string;
-  category: InterviewQuestionCategory;
+  category: string;
   difficulty: InterviewQuestionDifficulty;
   whyLikely: string;
   whatItEvaluates: string;

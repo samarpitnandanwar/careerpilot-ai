@@ -56,7 +56,7 @@ export default function DashboardPage() {
     async function load() {
       try {
         setLoading(true);
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) {
           if (!cancelled) setError("Not authenticated");
           return;
@@ -298,7 +298,7 @@ function DashboardActions() {
     let cancelled = false;
     async function load() {
       try {
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) return;
         const res = await fetch("/api/actions?status=OPEN&limit=5", {
           headers: { Authorization: `Bearer ${token}` },
@@ -372,7 +372,7 @@ function AnalyticsQuickInsights() {
     let cancelled = false;
     async function load() {
       try {
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) return;
         const res = await fetch("/api/analytics?range=all", {
           headers: { Authorization: `Bearer ${token}` },
@@ -421,14 +421,4 @@ function AnalyticsQuickInsights() {
   );
 }
 
-async function getToken(): Promise<string | null> {
-  try {
-    const { getAuth } = await import("firebase/auth");
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return null;
-    return user.getIdToken();
-  } catch {
-    return null;
-  }
-}
+import { getIdToken } from "@/lib/firebase/get-token";

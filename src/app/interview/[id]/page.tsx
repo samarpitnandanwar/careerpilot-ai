@@ -44,17 +44,7 @@ interface InterviewPageData {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function getToken(): Promise<string | null> {
-  try {
-    const { getAuth } = await import("firebase/auth");
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (!user) return null;
-    return user.getIdToken();
-  } catch {
-    return null;
-  }
-}
+import { getIdToken } from "@/lib/firebase/get-token";
 
 const difficultyConfig = {
   easy: { color: "success" as const, label: "Easy" },
@@ -227,7 +217,7 @@ export default function InterviewPrepPage({ params }: { params: Promise<{ id: st
     async function load() {
       try {
         setLoading(true);
-        const token = await getToken();
+        const token = await getIdToken();
         if (!token) {
           if (!cancelled) setError("Not authenticated");
           return;
@@ -292,7 +282,7 @@ export default function InterviewPrepPage({ params }: { params: Promise<{ id: st
     if (!data) return;
     try {
       setGenerating(true);
-      const token = await getToken();
+      const token = await getIdToken();
       if (!token) return;
 
       const res = await fetch(`/api/applications/${data.application.id}/interview-prep`, {
