@@ -328,6 +328,98 @@ describe("PubSubPushBodySchema", () => {
     });
     expect(result.success).toBe(false);
   });
+
+  it("accepts snake_case message_id and publish_time (Google Pub/Sub legacy format)", () => {
+    const body = {
+      message: {
+        data: Buffer.from("{}").toString("base64"),
+        message_id: "msg-456",
+        publish_time: "2025-09-01T00:00:00.000Z",
+      },
+      subscription: "projects/test/subscriptions/test-sub",
+    };
+    const result = PubSubPushBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts BOTH camelCase AND snake_case (actual Google Pub/Sub format)", () => {
+    // Google Pub/Sub sends both formats simultaneously for backward compat
+    const body = {
+      message: {
+        data: Buffer.from("{}").toString("base64"),
+        messageId: "2070443601311540",
+        message_id: "2070443601311540",
+        publishTime: "2021-02-26T19:13:55.749Z",
+        publish_time: "2021-02-26T19:13:55.749Z",
+      },
+      subscription: "projects/myproject/subscriptions/mysubscription",
+    };
+    const result = PubSubPushBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts orderingKey field", () => {
+    const body = {
+      message: {
+        data: Buffer.from("{}").toString("base64"),
+        orderingKey: "key-1",
+        messageId: "msg-1",
+        message_id: "msg-1",
+        publishTime: "2025-09-01T00:00:00.000Z",
+        publish_time: "2025-09-01T00:00:00.000Z",
+      },
+      subscription: "projects/test/subscriptions/test-sub",
+    };
+    const result = PubSubPushBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts deliveryAttempt at top level", () => {
+    const body = {
+      message: {
+        data: Buffer.from("{}").toString("base64"),
+      },
+      deliveryAttempt: 5,
+      subscription: "projects/test/subscriptions/test-sub",
+    };
+    const result = PubSubPushBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts attributes field", () => {
+    const body = {
+      message: {
+        data: Buffer.from("{}").toString("base64"),
+        attributes: { eventType: "APPLICATION_CREATED", userId: "uid-123" },
+      },
+      subscription: "projects/test/subscriptions/test-sub",
+    };
+    const result = PubSubPushBodySchema.safeParse(body);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects truly unknown fields at top level", () => {
+    const body = {
+      message: {
+        data: Buffer.from("{}").toString("base64"),
+      },
+      subscription: "projects/test/subscriptions/test-sub",
+      maliciousField: "should-not-pass",
+    };
+    const result = PubSubPushBodySchema.safeParse(body);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects truly unknown fields inside message", () => {
+    const body = {
+      message: {
+        data: Buffer.from("{}").toString("base64"),
+        unknownField: "bad",
+      },
+    };
+    const result = PubSubPushBodySchema.safeParse(body);
+    expect(result.success).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

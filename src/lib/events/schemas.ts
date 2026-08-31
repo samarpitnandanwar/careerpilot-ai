@@ -83,17 +83,33 @@ export type DomainEventEnvelopeInput = z.infer<typeof DomainEventEnvelopeSchema>
 /**
  * Pub/Sub push delivery sends this envelope.
  * @see https://cloud.google.com/pubsub/docs/push
+ *
+ * IMPORTANT: Google Pub/Sub sends BOTH camelCase AND snake_case fields
+ * simultaneously for backward compatibility:
+ *   - messageId AND message_id
+ *   - publishTime AND publish_time
+ *
+ * The schema must accept all legitimate Google Pub/Sub fields while
+ * rejecting genuinely unknown fields via .strict().
  */
 export const PubSubPushBodySchema = z
   .object({
     message: z
       .object({
         data: z.string().min(1),
+        // camelCase (current Pub/Sub format)
         messageId: z.string().optional(),
         publishTime: z.string().optional(),
+        // snake_case (still sent by Google for backward compat)
+        message_id: z.string().optional(),
+        publish_time: z.string().optional(),
+        // optional fields
         attributes: z.record(z.string(), z.string()).optional(),
+        orderingKey: z.string().optional(),
       })
       .strict(),
+    // deliveryAttempt is present on some push messages
+    deliveryAttempt: z.number().int().optional(),
     subscription: z.string().optional(),
   })
   .strict();
