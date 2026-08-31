@@ -11,6 +11,15 @@
 const pdfjsLib = require("pdfjs-dist");
 import mammoth from "mammoth";
 
+// In Node.js server environments (Cloud Run), pdfjs-dist tries to require
+// "./pdf.worker.js" at runtime which fails because the standalone build
+// doesn't include it. Pre-register the WorkerMessageHandler on globalThis
+// so pdfjs-dist finds it without needing to load the worker module.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const pdfWorkerModule = require("pdfjs-dist/build/pdf.worker.js");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+(globalThis as any).pdfjsWorker = pdfWorkerModule;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -65,6 +74,7 @@ export async function extractPdfText(buffer: Buffer): Promise<ExtractionResult> 
     return { text, charCount: text.length };
   } catch (error) {
     if (error instanceof ExtractionError) throw error;
+    console.error("[PDF] pdfjs-dist error:", error instanceof Error ? error.message : String(error));
     throw new ExtractionError(
       "Failed to read this PDF. The file may be corrupted or password-protected.",
       "PDF_PARSE_ERROR",

@@ -72,7 +72,7 @@ export async function processResume(
   try {
     await updateResume(uid, resumeId, { status: "processing" });
   } catch {
-    return fail(ERROR_CODES.FIRESTORE_FAILED, "Failed to update resume status");
+    return await fail(uid, resumeId, ERROR_CODES.FIRESTORE_FAILED, "Failed to update resume status");
   }
 
   try {
@@ -82,9 +82,9 @@ export async function processResume(
       fileBuffer = await downloadResume(uid, storagePath);
     } catch (error) {
       if (error instanceof StorageAccessError) {
-        return fail(ERROR_CODES.STORAGE_FAILED, "Failed to access resume file");
+        return await fail(uid, resumeId, ERROR_CODES.STORAGE_FAILED, "Failed to access resume file");
       }
-      return fail(ERROR_CODES.STORAGE_FAILED, "Failed to download resume file");
+      return await fail(uid, resumeId, ERROR_CODES.STORAGE_FAILED, "Failed to download resume file");
     }
 
     // Step 3: Extract text
@@ -96,9 +96,9 @@ export async function processResume(
         const code = error.code === "EMPTY_PDF" || error.code === "EMPTY_DOCX"
           ? ERROR_CODES.EMPTY_DOCUMENT
           : ERROR_CODES.EXTRACTION_FAILED;
-        return fail(code, error.message);
+        return await fail(uid, resumeId, code, error.message);
       }
-      return fail(ERROR_CODES.EXTRACTION_FAILED, "Failed to extract text from resume");
+      return await fail(uid, resumeId, ERROR_CODES.EXTRACTION_FAILED, "Failed to extract text from resume");
     }
 
     // Truncate very long text to stay within Gemini limits
@@ -113,11 +113,11 @@ export async function processResume(
     } catch (error) {
       if (error instanceof GeminiError) {
         if (error.code === "NO_RESPONSE") {
-          return fail(ERROR_CODES.GEMINI_UNAVAILABLE, "Resume processing is temporarily unavailable. Please try again.");
+          return await fail(uid, resumeId, ERROR_CODES.GEMINI_UNAVAILABLE, "Resume processing is temporarily unavailable. Please try again.");
         }
-        return fail(ERROR_CODES.GEMINI_FAILED, "AI processing failed. Please try again.");
+        return await fail(uid, resumeId, ERROR_CODES.GEMINI_FAILED, "AI processing failed. Please try again.");
       }
-      return fail(ERROR_CODES.GEMINI_FAILED, "Resume processing is temporarily unavailable. Please try again.");
+      return await fail(uid, resumeId, ERROR_CODES.GEMINI_FAILED, "Resume processing is temporarily unavailable. Please try again.");
     }
 
     // Step 5: Parse JSON response
@@ -131,10 +131,10 @@ export async function processResume(
         try {
           parsed = JSON.parse(jsonMatch[1]);
         } catch {
-          return fail(ERROR_CODES.INVALID_RESPONSE, "Failed to parse AI response");
+          return await fail(uid, resumeId, ERROR_CODES.INVALID_RESPONSE, "Failed to parse AI response");
         }
       } else {
-        return fail(ERROR_CODES.INVALID_RESPONSE, "Failed to parse AI response");
+        return await fail(uid, resumeId, ERROR_CODES.INVALID_RESPONSE, "Failed to parse AI response");
       }
     }
 
@@ -163,9 +163,9 @@ export async function processResume(
       };
     } catch (error) {
       if (error instanceof ResumeValidationError) {
-        return fail(ERROR_CODES.VALIDATION_FAILED, "AI response did not match expected format");
+        return await fail(uid, resumeId, ERROR_CODES.VALIDATION_FAILED, "AI response did not match expected format");
       }
-      return fail(ERROR_CODES.VALIDATION_FAILED, "Resume data validation failed");
+      return await fail(uid, resumeId, ERROR_CODES.VALIDATION_FAILED, "Resume data validation failed");
     }
 
     // Step 7: Save to Firestore
@@ -175,7 +175,7 @@ export async function processResume(
         parsedData: validatedData,
       });
     } catch {
-      return fail(ERROR_CODES.FIRESTORE_FAILED, "Failed to save parsed resume data");
+      return await fail(uid, resumeId, ERROR_CODES.FIRESTORE_FAILED, "Failed to save parsed resume data");
     }
 
     // Step 8: Publish domain event (fire-and-forget)
@@ -197,7 +197,7 @@ export async function processResume(
     };
   } catch (error) {
     // Catch-all: never let unexpected errors crash the pipeline
-    console.error("[ResumePipeline] Unexpected error:", error);
+    console.error("[ResumePipeline] Unexpected error:", error instanceof Error ? error.message : String(error));
     
     // Publish failure event (fire-and-forget)
     publishDomainEvent(
@@ -207,7 +207,7 @@ export async function processResume(
       { resumeId },
     ).catch(() => {});
     
-    return fail(ERROR_CODES.GEMINI_FAILED, "An unexpected error occurred during processing");
+    return await fail(uid, resumeId, ERROR_CODES.GEMINI_FAILED, "An unexpected error occurred during processing");
   }
 }
 
@@ -215,6 +215,21 @@ export async function processResume(
 // Helper
 // ---------------------------------------------------------------------------
 
-function fail(code: string, message: string): PipelineResult {
+async function fail(
+  uid: string,
+  resumeId: string,
+  code: string,
+  message: string,
+): Promise<PipelineResult> {
+  // Persist failure to Firestore so the resume doesn't stay stuck at "processing"
+  try {
+    await updateResume(uid, resumeId, {
+      status: "failed",
+      errorCode: code,
+      errorMessage: message,
+    });
+  } catch (err) {
+    console.error("[ResumePipeline] Failed to persist error state:", err);
+  }
   return { success: false, parsedData: null, errorCode: code, errorMessage: message };
 }

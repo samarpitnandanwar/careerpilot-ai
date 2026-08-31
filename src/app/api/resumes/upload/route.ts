@@ -111,11 +111,22 @@ export async function POST(request: Request) {
       return null;
     });
 
-    // Return the resume with its current status (may be 'ready' or 'failed')
+    // Return the resume with its current status
     if (processResult && processResult.success) {
       return jsonCreated({ ...resume, status: "ready" });
     }
 
+    // Processing failed — return the failed status so the UI can display it
+    if (processResult && !processResult.success) {
+      return jsonCreated({
+        ...resume,
+        status: "failed",
+        errorCode: processResult.errorCode,
+        errorMessage: processResult.errorMessage,
+      });
+    }
+
+    // Processing was null (catch handler swallowed error)
     return jsonCreated(resume);
   } catch (error) {
     console.error("[Upload] Unexpected error:", error);

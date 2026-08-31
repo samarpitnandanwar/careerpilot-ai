@@ -1,33 +1,27 @@
+substitutions:
+  _IMAGE: us-central1-docker.pkg.dev/careerpilot-ai-506813/careerpilot-ai/careerpilot-ai
 steps:
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - build
-      - -t
-      - gcr.io/$PROJECT_ID/careerpilot-ai
-      - .
-  - name: gcr.io/cloud-builders/docker
-    args:
-      - push
-      - gcr.io/$PROJECT_ID/careerpilot-ai
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${_IMAGE}', '.']
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_IMAGE}']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
-      - run
-      - deploy
-      - careerpilot-ai
-      - --image
-      - gcr.io/$PROJECT_ID/careerpilot-ai
-      - --region
-      - us-central1
-      - --platform
-      - managed
-      - --allow-unauthenticated
-      - --service-account
-      - careerpilot-runtime@careerpilot-ai-506813.iam.gserviceaccount.com
-      - --set-env-vars
-      - GEMINI_MODEL=gemini-3.5-flash,GEMINI_LOCATION=asia-south1,PUBSUB_TOPIC=careerpilot-events,PUBSUB_SUBSCRIPTION=careerpilot-events-sub
+      - 'run'
+      - 'deploy'
+      - 'careerpilot-ai'
+      - '--image=${_IMAGE}'
+      - '--region=us-central1'
+      - '--platform=managed'
+      - '--service-account=careerpilot-runtime@careerpilot-ai-506813.iam.gserviceaccount.com'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--no-allow-unauthenticated'
 images:
-  - gcr.io/$PROJECT_ID/careerpilot-ai
-timeout: 600s
+  - '${_IMAGE}'
+timeout: '600s'
 options:
   logging: CLOUD_LOGGING_ONLY
