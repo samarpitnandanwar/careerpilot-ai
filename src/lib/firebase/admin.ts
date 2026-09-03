@@ -56,8 +56,11 @@ function getOrInitApp(): App {
   //   3. Fallback → GOOGLE_APPLICATION_CREDENTIALS env var (local dev only)
   //
   // If none are available, verifyIdToken() will throw a clear error.
+  // Do NOT pass explicit projectId — ADC auto-detects it on Cloud Run.
+  // Setting projectId constrains the JWT issuer check to securetoken.google.com,
+  // but Identity Platform tokens use identitytoolkit.google.com as issuer.
+  // ADC-based initialization accepts both issuers automatically.
   _app = initializeApp({
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? "careerpilot-ai-506813",
     storageBucket: process.env.NEXT_PUBLIC_RESUME_BUCKET ?? "careerpilot-ai-506813-resumes",
   });
 

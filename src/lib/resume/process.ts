@@ -163,8 +163,30 @@ export async function processResume(
       };
     } catch (error) {
       if (error instanceof ResumeValidationError) {
+        // Structured diagnostic logging — reveals the exact Zod field/path failure
+        // without exposing resume contents, tokens, or credentials
+        console.error(
+          JSON.stringify({
+            event: "RESUME_VALIDATION_FAILED",
+            resumeId,
+            uid,
+            errorName: error.name,
+            errorMessage: error.message,
+            timestamp: new Date().toISOString(),
+          }),
+        );
         return await fail(uid, resumeId, ERROR_CODES.VALIDATION_FAILED, "AI response did not match expected format");
       }
+      console.error(
+        JSON.stringify({
+          event: "RESUME_VALIDATION_UNKNOWN_ERROR",
+          resumeId,
+          uid,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+          timestamp: new Date().toISOString(),
+        }),
+      );
       return await fail(uid, resumeId, ERROR_CODES.VALIDATION_FAILED, "Resume data validation failed");
     }
 

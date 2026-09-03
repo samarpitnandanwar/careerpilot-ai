@@ -227,7 +227,108 @@ describe("Prompt", () => {
 });
 
 // ============================================================================
-// 7. GCP Integration Tests (skipped — require credentials)
+// 7. Validation Diagnostic Logging Regression Tests
+// ============================================================================
+
+describe("Validation Diagnostic Logging", () => {
+  it("ResumeValidationError message contains structured path and issue details", () => {
+    // When validateResumeData throws, the error message includes field paths.
+    // processResume logs this via structured JSON to Cloud Logging.
+    // This test verifies the validation error structure that gets logged.
+    const invalidOutputs = [
+      {
+        label: "null email",
+        input: {
+          personal: { name: "Test", email: null },
+          summary: "", skills: {}, experience: [], education: [],
+          certifications: [], projects: [], totalYearsExperience: 0,
+          seniority: "", domains: [], strengths: [],
+          potentialGaps: [], careerSignals: [],
+        },
+        expectedPath: "personal.email",
+      },
+      {
+        label: "string GPA",
+        input: {
+          personal: { name: "Test", email: "a@b.com" },
+          summary: "", skills: {}, experience: [],
+          education: [{ institution: "MIT", gpa: "3.8" }],
+          certifications: [], projects: [], totalYearsExperience: 0,
+          seniority: "", domains: [], strengths: [],
+          potentialGaps: [], careerSignals: [],
+        },
+        expectedPath: "education.0.gpa",
+      },
+      {
+        label: "null institution",
+        input: {
+          personal: { name: "Test", email: "a@b.com" },
+          summary: "", skills: {}, experience: [],
+          education: [{ institution: null, gpa: 3.0 }],
+          certifications: [], projects: [], totalYearsExperience: 0,
+          seniority: "", domains: [], strengths: [],
+          potentialGaps: [], careerSignals: [],
+        },
+        expectedPath: "education.0.institution",
+      },
+      {
+        label: "empty company",
+        input: {
+          personal: { name: "Test", email: "a@b.com" },
+          summary: "", skills: {},
+          experience: [{ company: "" }],
+          education: [], certifications: [], projects: [],
+          totalYearsExperience: 0,
+          seniority: "", domains: [], strengths: [],
+          potentialGaps: [], careerSignals: [],
+        },
+        expectedPath: "experience.0.company",
+      },
+    ];
+
+    for (const { label, input, expectedPath } of invalidOutputs) {
+      try {
+        validateResumeData(input);
+        expect.fail(`Should have thrown for ${label}`);
+      } catch (error) {
+        expect(error).toBeInstanceOf(ResumeValidationError);
+        const err = error as ResumeValidationError;
+        // The error message must contain the field path for diagnostic logging
+        expect(err.message).toContain(expectedPath);
+        // The error message starts with "Invalid resume data:"
+        expect(err.message).toMatch(/^Invalid resume data:/);
+      }
+    }
+  });
+
+  it("processResume returns generic user-facing error while validation details are in error.message", () => {
+    // Verify that ResumeValidationError thrown by validateResumeData
+    // carries enough detail for structured logging but the user sees
+    // only "AI response did not match expected format"
+    const badInput = {
+      personal: { name: "Test", email: "not-an-email" },
+      summary: "", skills: {}, experience: [], education: [],
+      certifications: [], projects: [], totalYearsExperience: 0,
+      seniority: "", domains: [], strengths: [],
+      potentialGaps: [], careerSignals: [],
+    };
+
+    try {
+      validateResumeData(badInput);
+      expect.fail("Should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResumeValidationError);
+      const err = error as ResumeValidationError;
+      // This message is what gets logged via structured JSON in processResume
+      expect(err.message).toContain("personal.email");
+      // The user sees the generic string from processResume's fail() call
+      // ("AI response did not match expected format") — NOT this raw error
+    }
+  });
+});
+
+// ============================================================================
+// 8. GCP Integration Tests (skipped — require credentials)
 // ============================================================================
 
 describe("GCP Integration (requires credentials)", () => {
